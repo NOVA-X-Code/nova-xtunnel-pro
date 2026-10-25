@@ -7,7 +7,7 @@
 #
 set -e
 
-REPO_URL="https://github.com/NOSTRA-DevOps/nova-xtunnel.git"
+REPO_URL="https://github.com/NOVA-X-Code/nova-xtunnel-pro.git"
 INSTALL_DIR="/opt/nova-x-tunnel"
 
 if [[ $EUID -ne 0 ]]; then

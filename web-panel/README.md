@@ -47,7 +47,7 @@ its own Nginx instance — no existing HAProxy config is touched.
 
 ```bash
 cd /opt
-git clone https://github.com/NOSTRA-DevOps/nova-xtunnel.git nova-x-tunnel
+git clone https://github.com/NOVA-X-Code/nova-xtunnel-pro.git nova-x-tunnel
 cd nova-x-tunnel/web-panel
 sudo bash deploy/install.sh
 ```

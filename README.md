@@ -75,7 +75,7 @@ bash web-panel/update.sh
 Terminal Panel
 ```bash
 
-git clone https://github.com/NOSTRA-DevOps/nova-xtunnel.git nova-x-tunnel
+git clone https://github.com/NOVA-X-Code/nova-xtunnel-pro.git nova-x-tunnel
 cd nova-x-tunnel/terminal-panel
 sudo bash install.sh
 ```
