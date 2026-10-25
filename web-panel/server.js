@@ -14,6 +14,7 @@ require('./db/database'); // bootstraps schema + default admin
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const resellerRoutes = require('./routes/reseller');
+const apiRoutes = require('./routes/api');
 const { runEnforcement } = require('./cron/enforcement');
 const i18n = require('./lib/i18n');
 const format = require('./lib/format');
@@ -84,6 +85,8 @@ app.get('/', (req, res) => {
 // Public - no login required, just project/company info.
 app.get('/about', (req, res) => res.render('about'));
 
+app.use('/api/v1', apiRoutes);
+app.use('/api', apiRoutes);
 app.use(authRoutes);
 app.use('/admin', adminRoutes);
 app.use('/reseller', resellerRoutes);

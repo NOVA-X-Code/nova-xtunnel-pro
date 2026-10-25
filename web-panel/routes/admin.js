@@ -153,6 +153,123 @@ router.post('/change-password', (req, res) => {
   }
 });
 
+// Templates & Access Codes Management (Admin)
+router.get('/access-codes', (req, res) => {
+  const templates = db.prepare('SELECT * FROM config_templates ORDER BY id DESC').all();
+  const accessCodes = db.prepare(`
+    SELECT ac.*, r.username as reseller_username
+    FROM access_codes ac
+    LEFT JOIN resellers r ON ac.reseller_id = r.id
+    ORDER BY ac.id DESC
+  `).all();
+  const notifications = db.prepare('SELECT * FROM broadcast_notifications ORDER BY id DESC').all();
+
+  res.render('admin/access_codes', {
+    templates,
+    accessCodes,
+    notifications,
+    error: req.query.error,
+    success: req.query.success
+  });
+});
+
+router.post('/config-templates', (req, res) => {
+  try {
+    const { name, protocol, server_ip, server_port, xray_inbound_id, sni, is_base_config, is_customizable, is_quota_counted, is_global_premium } = req.body;
+
+    db.prepare(`
+      INSERT INTO config_templates (
+        name, protocol, server_ip, server_port, xray_inbound_id, sni,
+        is_base_config, is_customizable, is_quota_counted, is_global_premium
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      name, protocol, server_ip, parseInt(server_port, 10) || 443,
+      xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
+      sni || '',
+      is_base_config ? 1 : 0,
+      is_customizable ? 1 : 0,
+      is_quota_counted ? 1 : 0,
+      is_global_premium ? 1 : 0
+    );
+
+    audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/config-templates/:id/delete', (req, res) => {
+  try {
+    db.prepare('DELETE FROM config_templates WHERE id = ?').run(req.params.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template supprimé.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes', (req, res) => {
+  try {
+    const accessCodesLib = require('../lib/accessCodes');
+    const { clientReference, maxDataGb, expiryDays, hwid } = req.body;
+
+    const result = accessCodesLib.createAccessCode({
+      resellerId: null, // Created by admin directly
+      clientReference: clientReference || '',
+      maxDataGb: parseFloat(maxDataGb) || 20,
+      expiryDays: parseInt(expiryDays, 10) || 30
+    });
+
+    if (hwid && hwid.trim().length > 0) {
+      db.prepare('UPDATE access_codes SET allowed_hwids = ? WHERE id = ?').run(hwid.trim(), result.accessCodeId);
+    }
+
+    audit.log('admin', req.session.username, 'create_access_code', `Code d'accès Admin généré : ${result.code}`, null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès créé : ${result.code}`));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes/:id/delete', (req, res) => {
+  try {
+    db.prepare('DELETE FROM access_codes WHERE id = ?').run(req.params.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/broadcast-notifications', (req, res) => {
+  try {
+    const { title, message, url } = req.body;
+    if (!title || !message) throw new Error('Titre et message requis.');
+
+    db.prepare('UPDATE broadcast_notifications SET is_active = 0').run();
+    db.prepare('INSERT INTO broadcast_notifications (title, message, url, is_active) VALUES (?, ?, ?, 1)').run(title, message, url || '');
+
+    audit.log('admin', req.session.username, 'create_notification', `Notification Admin diffusée : ${title}`, null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Notification Admin diffusée avec succès.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/broadcast-notifications/:id/delete', (req, res) => {
+  try {
+    db.prepare('DELETE FROM broadcast_notifications WHERE id = ?').run(req.params.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Notification supprimée.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+module.exports = router;
+  } catch (e) {
+    res.redirect('/admin?error=' + encodeURIComponent(e.message));
+  }
+});
+
 router.post('/resellers/:id/clients', (req, res) => {
   const resellerId = req.params.id;
   try {

@@ -134,4 +134,62 @@ router.post('/change-password', (req, res) => {
   }
 });
 
+// Access Codes Management for Resellers
+router.get('/access-codes', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  const accessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0').all();
+
+  res.render('reseller/access_codes', {
+    reseller,
+    accessCodes,
+    extraTemplates,
+    error: req.query.error,
+    success: req.query.success
+  });
+});
+
+router.post('/access-codes', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    const accessCodesLib = require('../lib/accessCodes');
+    const { clientReference, maxDataGb, expiryDays, hwid, selectedTemplateIds } = req.body;
+
+    const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
+
+    const result = accessCodesLib.createAccessCode({
+      resellerId: reseller.id,
+      clientReference: clientReference || '',
+      maxDataGb: parseFloat(maxDataGb) || 10,
+      expiryDays: parseInt(expiryDays, 10) || 30,
+      selectedTemplateIds: templatesList
+    });
+
+    if (hwid && hwid.trim().length > 0) {
+      db.prepare('UPDATE access_codes SET allowed_hwids = ? WHERE id = ?').run(hwid.trim(), result.accessCodeId);
+    }
+
+    audit.log('reseller', req.session.username, 'create_access_code', `Code Premium généré: ${result.code}`, reseller.id);
+    res.redirect('/reseller/access-codes?success=' + encodeURIComponent(`Code d'accès créé : ${result.code}`));
+  } catch (e) {
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes/:id/delete', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    db.prepare('DELETE FROM access_codes WHERE id = ? AND reseller_id = ?').run(req.params.id, reseller.id);
+    res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
+  } catch (e) {
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
 module.exports = router;

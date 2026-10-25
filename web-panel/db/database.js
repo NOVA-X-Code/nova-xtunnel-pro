@@ -43,6 +43,73 @@ CREATE TABLE IF NOT EXISTS clients (
 );
 
 CREATE INDEX IF NOT EXISTS idx_clients_reseller ON clients(reseller_id);
+
+-- Access Codes & Custom Premium JSON Config System
+CREATE TABLE IF NOT EXISTS config_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  protocol TEXT NOT NULL,                -- 'ssh' | 'vless' | 'vmess' | 'trojan' | 'slowdns' | 'udp'
+  name TEXT NOT NULL,                    -- ex: "Cloudflare VLESS WS"
+  server_ip TEXT NOT NULL,
+  server_port INTEGER DEFAULT 22,
+
+  -- 3X-UI Inbound Integration
+  xray_inbound_id INTEGER DEFAULT NULL,  -- Inbound ID in 3X-UI (e.g. 1, 2, 3)
+  xray_inbound_tag TEXT DEFAULT NULL,    -- Tag name in 3X-UI
+
+  -- Rules & Flags
+  is_base_config INTEGER DEFAULT 0,      -- 1 = Included in base JSON by default
+  is_customizable INTEGER DEFAULT 1,     -- 1 = Re-generated with unique premium credentials for Access Codes
+  is_quota_counted INTEGER DEFAULT 1,    -- 1 = Counted against reseller quota, 0 = Unlimited/Free for reseller
+  is_global_premium INTEGER DEFAULT 0,   -- 1 = Forced on ALL premium access codes for all resellers
+
+  payload TEXT,
+  sni TEXT,
+  path TEXT,
+  default_user TEXT,
+  default_pass TEXT
+);
+
+CREATE TABLE IF NOT EXISTS access_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  reseller_id INTEGER REFERENCES resellers(id) ON DELETE SET NULL,
+  code TEXT UNIQUE NOT NULL,             -- ex: "NXT-98A2-33F1"
+  client_reference TEXT DEFAULT '',      -- Phone number or client name (e.g. "+225 07080910")
+  max_data_gb REAL DEFAULT 10.0,         -- Max data limit in GB (0 = unlimited)
+  consumed_data_gb REAL DEFAULT 0.0,     -- Consumed data in GB
+  max_devices INTEGER DEFAULT 1,
+  expiry_date TEXT,                      -- Expiration date YYYY-MM-DD
+  allowed_hwids TEXT DEFAULT '',         -- Bound HWID(s)
+  status TEXT DEFAULT 'active',          -- 'active' | 'expired' | 'depleted' | 'locked'
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+try { db.exec('ALTER TABLE config_templates ADD COLUMN is_global_premium INTEGER DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN client_reference TEXT DEFAULT ""'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN expiry_days INTEGER DEFAULT 30'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN activated_at TEXT DEFAULT NULL'); } catch (e) {}
+
+CREATE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
+
+CREATE TABLE IF NOT EXISTS code_credentials (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  access_code_id INTEGER NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
+  config_template_id INTEGER NOT NULL REFERENCES config_templates(id) ON DELETE CASCADE,
+
+  xray_inbound_id INTEGER DEFAULT NULL,
+  client_uuid_or_user TEXT NOT NULL,     -- Generated unique UUID or SSH user
+  client_password TEXT DEFAULT NULL,     -- Generated unique SSH password
+  client_email_tag TEXT NOT NULL,        -- 3X-UI client email identifier
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS broadcast_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  url TEXT DEFAULT '',
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
 // Migration: older databases were created before this column existed. SQLite has no

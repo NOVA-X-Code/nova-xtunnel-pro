@@ -12,6 +12,10 @@ echo "Mise à jour de NOVA X Tunnel (panel terminal)..."
 cp "$SCRIPT_DIR/menu.sh" /usr/local/bin/menu
 chmod +x /usr/local/bin/menu
 
+# Falcon Proxy has been removed from the panel entirely - clean up any leftover files from
+# a server that was updated before this removal, so nothing unused lingers on disk.
+rm -rf /opt/novaxtunnel/falconproxy
 
-echo "✅ Command menu updated. You can now run 'menu' from any terminal to access the NOVA X Tunnel panel."
-
+echo "✅ Commande 'menu' mise à jour."
+echo "(La configuration SSH existante n'est pas retouchée par une mise à jour."
+echo " Pour la réappliquer, relancez install.sh à la place.)"

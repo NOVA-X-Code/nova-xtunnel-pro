@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('../partials/head', { title: 'Gestion Codes & Templates - Admin NovaXTunnel' }) %>
+  <style>
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 12px; padding: 18px; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-success { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
+    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+    .badge-purple { background: rgba(124, 92, 255, 0.15); color: #A78BFA; }
+    .badge-blue { background: rgba(34, 211, 238, 0.15); color: #22D3EE; }
+    .code-box { font-family: monospace; font-size: 14px; font-weight: 700; background: rgba(124, 92, 255, 0.1); color: #A78BFA; padding: 4px 8px; border-radius: 6px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/sidebar') %>
+
+  <div class="main-content">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px;">
+      <div>
+        <h1 style="font-size:24px; font-weight:800; margin:0;">Gestion Templates, Codes & Notifications</h1>
+        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:14px;">Configurez les inbounds 3X-UI, gérez les clés d'accès et envoyez des notifications broadcast à l'application.</p>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-primary" style="background:#F59E0B;" onclick="document.getElementById('modalSendNotif').style.display='flex'">
+          🔔 Notification App
+        </button>
+        <button class="btn-primary" onclick="document.getElementById('modalAddTemplate').style.display='flex'">
+          + Template/Inbound
+        </button>
+        <button class="btn-primary" style="background:#22C55E;" onclick="document.getElementById('modalCreateCode').style.display='flex'">
+          + Générer Code
+        </button>
+      </div>
+    </div>
+
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#EF4444; padding:12px; border-radius:8px; margin-bottom:20px;">
+        <%= error %>
+      </div>
+    <% } %>
+
+    <% if (typeof success !== 'undefined' && success) { %>
+      <div style="background:rgba(34,197,94,0.15); border:1px solid #22C55E; color:#22C55E; padding:12px; border-radius:8px; margin-bottom:20px;">
+        <%= success %>
+      </div>
+    <% } %>
+
+    <!-- SECTION 1: NOTIFICATIONS BROADCAST ADMIN -->
+    <% if (typeof notifications !== 'undefined' && notifications.length > 0) { %>
+      <div class="stat-card" style="margin-bottom:24px; border-color:#F59E0B;">
+        <h3 style="margin-top:0; font-size:16px; color:#F59E0B; margin-bottom:12px;">🔔 Notifications Broadcast Diffusées</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
+                <th style="padding:8px;">Titre</th>
+                <th style="padding:8px;">Message</th>
+                <th style="padding:8px;">URL / Lien</th>
+                <th style="padding:8px;">Statut</th>
+                <th style="padding:8px;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% notifications.forEach(n => { %>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:10px; font-weight:600;"><%= n.title %></td>
+                  <td style="padding:10px;"><%= n.message %></td>
+                  <td style="padding:10px; color:var(--text-muted); font-family:monospace;"><%= n.url ? n.url : '-' %></td>
+                  <td style="padding:10px;">
+                    <span class="badge badge-<%= n.is_active ? 'success' : 'danger' %>"><%= n.is_active ? 'Actif' : 'Inactif' %></span>
+                  </td>
+                  <td style="padding:10px;">
+                    <form method="POST" action="/admin/broadcast-notifications/<%= n.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer cette notification ?');">
+                      <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- SECTION 2: TEMPLATES & INBOUNDS -->
+    <div class="stat-card" style="margin-bottom:30px;">
+      <h3 style="margin-top:0; font-size:16px; margin-bottom:16px;">1. Modèles de Configuration & Inbounds (3X-UI / Xray / SSH)</h3>
+      <% if (templates.length === 0) { %>
+        <p style="color:var(--text-muted); font-size:14px; margin:0;">Aucun modèle de config. Ajoutez des inbounds 3X-UI ou des serveurs SSH ci-dessus.</p>
+      <% } else { %>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
+                <th style="padding:10px;">Nom du Serveur</th>
+                <th style="padding:10px;">Protocole</th>
+                <th style="padding:10px;">Inbound 3X-UI ID</th>
+                <th style="padding:10px;">Type de Config</th>
+                <th style="padding:10px;">Comptabilisé Quota</th>
+                <th style="padding:10px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% templates.forEach(t => { %>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:12px 10px; font-weight:600;"><%= t.name %></td>
+                  <td style="padding:12px 10px;"><span class="badge badge-purple"><%= t.protocol.toUpperCase() %></span></td>
+                  <td style="padding:12px 10px;"><%= t.xray_inbound_id ? '#' + t.xray_inbound_id : '-' %></td>
+                  <td style="padding:12px 10px;">
+                    <% if (t.is_global_premium) { %>
+                      <span class="badge badge-blue">Global Premium Admin</span>
+                    <% } else if (t.is_base_config) { %>
+                      <span class="badge badge-purple">Base Gratuit</span>
+                    <% } else { %>
+                      <span class="badge">Optionnel Revendeur</span>
+                    <% } %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <% if (t.is_quota_counted) { %>
+                      <span class="badge badge-danger">Comptabilisé</span>
+                    <% } else { %>
+                      <span class="badge badge-success">Illimité Revendeur</span>
+                    <% } %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <form method="POST" action="/admin/config-templates/<%= t.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce template ?');">
+                      <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- SECTION 3: CODES D'ACCÈS -->
+    <div class="stat-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <h3 style="margin:0; font-size:16px;">2. Tous les Codes d'Accès Générés</h3>
+        <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="🔍 Rechercher par code, nom ou téléphone..." style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:280px; font-size:13px;" />
+      </div>
+
+      <% if (accessCodes.length === 0) { %>
+        <p style="color:var(--text-muted); font-size:14px; margin:0;">Aucun code d'accès généré pour l'instant.</p>
+      <% } else { %>
+        <div style="overflow-x:auto;">
+          <table id="codesTable" style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
+                <th style="padding:10px;">Référence / Client</th>
+                <th style="padding:10px;">Code Premium</th>
+                <th style="padding:10px;">Revendeur</th>
+                <th style="padding:10px;">Consommation Data</th>
+                <th style="padding:10px;">HWID Lié</th>
+                <th style="padding:10px;">Expiration</th>
+                <th style="padding:10px;">Statut</th>
+                <th style="padding:10px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% accessCodes.forEach(c => { %>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:12px 10px; font-weight:600;">
+                    <%= c.client_reference ? c.client_reference : 'Sans nom' %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <span class="code-box"><%= c.code %></span>
+                    <button class="btn-ghost small" onclick="navigator.clipboard.writeText('<%= c.code %>'); alert('Code copié : <%= c.code %>');" style="padding:2px 6px; margin-left:4px;">📋</button>
+                  </td>
+                  <td style="padding:12px 10px;"><%= c.reseller_username ? c.reseller_username : 'Admin' %></td>
+                  <td style="padding:12px 10px;"><strong><%= c.consumed_data_gb.toFixed(2) %> Go</strong> / <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %></td>
+                  <td style="padding:12px 10px; font-family:monospace; color:var(--text-muted);"><%= c.allowed_hwids ? c.allowed_hwids : 'Non lié' %></td>
+                  <td style="padding:12px 10px;"><%= c.expiry_date ? c.expiry_date : 'Illimité' %></td>
+                  <td style="padding:12px 10px;">
+                    <span class="badge badge-<%= c.status === 'active' ? 'success' : 'danger' %>"><%= c.status %></span>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <form method="POST" action="/admin/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code ?');">
+                      <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Modal Envoyez Notification Broadcast -->
+  <div id="modalSendNotif" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
+    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:500px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <h3 style="margin:0; font-size:18px; color:#F59E0B;">🔔 Diffuser une Notification App</h3>
+        <button onclick="document.getElementById('modalSendNotif').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+      </div>
+
+      <form method="POST" action="/admin/broadcast-notifications">
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Titre de la Notification</label>
+          <input type="text" name="title" required placeholder="ex: 📢 Nouveaux serveurs disponibles !" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Message de la Notification</label>
+          <textarea name="message" rows="3" required placeholder="ex: De nouveaux serveurs VIP ont été ajoutés sur le réseau. Mettez à jour vos configs." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);"></textarea>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">URL de redirection (Optionnel)</label>
+          <input type="text" name="url" placeholder="ex: https://wa.me/237676250509" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+          <button type="button" class="btn-ghost" onclick="document.getElementById('modalSendNotif').style.display='none'">Annuler</button>
+          <button type="submit" class="btn-primary" style="background:#F59E0B;">Envoyer la Notification</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Ajouter Template/Inbound -->
+  <div id="modalAddTemplate" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
+    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:550px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <h3 style="margin:0; font-size:18px;">Nouveau Template / Inbound</h3>
+        <button onclick="document.getElementById('modalAddTemplate').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+      </div>
+
+      <form method="POST" action="/admin/config-templates">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Nom du Serveur</label>
+            <input type="text" name="name" required placeholder="ex: France VIP - Cloudflare WS" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Protocole</label>
+            <select name="protocol" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
+              <option value="vless">VLESS (Xray)</option>
+              <option value="vmess">VMess (Xray)</option>
+              <option value="trojan">Trojan (Xray)</option>
+              <option value="slowdns">SlowDNS / DNSTT</option>
+              <option value="ssh">SSH Direct / Proxy</option>
+              <option value="udp">UDP Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">IP Serveur</label>
+            <input type="text" name="server_ip" required placeholder="185.220.101.5" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Port</label>
+            <input type="number" name="server_port" value="443" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">3X-UI Inbound ID</label>
+            <input type="number" name="xray_inbound_id" placeholder="ex: 1" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+          </div>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Payload / SNI (Optionnel)</label>
+          <input type="text" name="sni" placeholder="ex: cloudflare.com" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:12px;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
+            <input type="checkbox" name="is_global_premium" value="1" />
+            <span style="color:#22D3EE; font-weight:600;">Forcer sur TOUTES les configs Premium (Forcé pour tous les revendeurs)</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
+            <input type="checkbox" name="is_base_config" value="1" checked />
+            <span>Inclus par défaut dans le JSON de base</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
+            <input type="checkbox" name="is_customizable" value="1" checked />
+            <span>Personnalisable (Régénère un identifiant unique lors des codes)</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" name="is_quota_counted" value="1" checked />
+            <span>Comptabilisé sur le Quota Revendeur (Décocher pour "Illimité Revendeur")</span>
+          </label>
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+          <button type="button" class="btn-ghost" onclick="document.getElementById('modalAddTemplate').style.display='none'">Annuler</button>
+          <button type="submit" class="btn-primary">Enregistrer Template</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Admin Générer Code -->
+  <div id="modalCreateCode" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
+    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:500px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <h3 style="margin:0; font-size:18px;">Générer un Code d'Accès (Admin)</h3>
+        <button onclick="document.getElementById('modalCreateCode').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+      </div>
+
+      <form method="POST" action="/admin/access-codes">
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">N° Téléphone / Nom du Client</label>
+          <input type="text" name="clientReference" placeholder="ex: +225 07080910 ou Client VIP 1" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Limite de Data (Go)</label>
+          <input type="number" step="0.5" name="maxDataGb" value="20" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Durée de Validité (Jours)</label>
+          <input type="number" name="expiryDays" value="30" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">HWID / Device ID Client (Facultatif)</label>
+          <input type="text" name="hwid" placeholder="Ex: A1B2C3D4E5F6" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+          <button type="button" class="btn-ghost" onclick="document.getElementById('modalCreateCode').style.display='none'">Annuler</button>
+          <button type="submit" class="btn-primary">Générer Code</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function filterTable() {
+      var input = document.getElementById('searchInput');
+      var filter = input.value.toLowerCase();
+      var table = document.getElementById('codesTable');
+      var tr = table.getElementsByTagName('tr');
+
+      for (var i = 1; i < tr.length; i++) {
+        var text = tr[i].textContent || tr[i].innerText;
+        if (text.toLowerCase().indexOf(filter) > -1) {
+          tr[i].style.display = '';
+        } else {
+          tr[i].style.display = 'none';
+        }
+      }
+    }
+  </script>
+</body>
+</html>

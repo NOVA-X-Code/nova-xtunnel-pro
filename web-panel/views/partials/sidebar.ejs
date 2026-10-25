@@ -26,12 +26,14 @@
   <div class="nav-group">
     <div class="nav-label"><%= t('nav.admin_group') %></div>
     <a class="nav-link <%= currentPath === '/admin/system' ? 'active' : '' %>" href="/admin/system"><%= t('nav.system') %></a>
-    <a class="nav-link <%= currentPath === '/admin' ? 'active' : '' %>" href="/admin"><%= t('nav.resellers') %></a>
+    <a class="nav-link <%= currentPath === '/admin' ? 'active' : '' %>" href="/admin">Resellers Serveurs</a>
+    <a class="nav-link <%= currentPath === '/admin/access-codes' ? 'active' : '' %>" href="/admin/access-codes">Codes & Inbounds</a>
   </div>
   <% } else { %>
   <div class="nav-group">
     <div class="nav-label"><%= t('nav.account_group') %></div>
-    <a class="nav-link <%= currentPath === '/reseller' ? 'active' : '' %>" href="/reseller"><%= t('nav.my_clients') %></a>
+    <a class="nav-link <%= currentPath === '/reseller' ? 'active' : '' %>" href="/reseller">Comptes Serveur</a>
+    <a class="nav-link <%= currentPath === '/reseller/access-codes' ? 'active' : '' %>" href="/reseller/access-codes">Codes Premium</a>
   </div>
   <% } %>
 

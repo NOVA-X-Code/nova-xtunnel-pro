@@ -37,6 +37,14 @@ SSL_CERT_DIR="/etc/novaxtunnel/ssl"
 SSL_CERT_FILE="$SSL_CERT_DIR/novaxtunnel.pem"
 SSL_CERT_CHAIN_FILE="$SSL_CERT_DIR/novaxtunnel.crt"
 SSL_CERT_KEY_FILE="$SSL_CERT_DIR/novaxtunnel.key"
+# Multi-domain TLS: the main certificate above ("novaxtunnel", self-signed) is the DEFAULT -
+# used for the VPS IP and for any SNI that matches no domain. Every extra domain gets its own
+# certificate named novaxtunnel1, novaxtunnel2, ... registered in domains.db
+# (format: name|domain|type|email|created), and HAProxy/Nginx pick the right one from the SNI.
+EDGE_DOMAINS_FILE="$SSL_CERT_DIR/domains.db"
+EDGE_RENEW_SCRIPT="/usr/local/bin/novaxtunnel-cert-renew.sh"
+EDGE_RENEW_CRON_MARKER="novaxtunnel-cert-renew"
+NGINX_LOCATIONS_SNIPPET="/etc/nginx/snippets/novaxtunnel-locations.conf"
 EDGE_CERT_INFO_FILE="$DB_DIR/edge_cert.conf"
 NGINX_PORTS_FILE="$DB_DIR/nginx_ports.conf"
 EDGE_PUBLIC_HTTP_PORT="80"
@@ -84,6 +92,25 @@ ZIVPN_LISTEN_PORT="5667"
 # Doit rester totalement disjointe de UDP_CUSTOM_RANGE_START:UDP_CUSTOM_RANGE_END.
 ZIVPN_RANGE_START="6000"
 ZIVPN_RANGE_END="19999"
+
+SLOWUDP_DIR="/etc/slowudp"
+SLOWUDP_BIN="/usr/local/bin/slowudp"
+SLOWUDP_SERVICE_FILE="/etc/systemd/system/slowudp-server.service"
+SLOWUDP_SERVICE_X_FILE="/etc/systemd/system/slowudp-server@.service"
+SLOWUDP_CONFIG_FILE="$SLOWUDP_DIR/config.json"
+SLOWUDP_CERT_FILE="$SLOWUDP_DIR/cert.crt"
+SLOWUDP_KEY_FILE="$SLOWUDP_DIR/private.key"
+SLOWUDP_META_FILE="$SLOWUDP_DIR/passwords_meta.json"
+SLOWUDP_CLEANUP_SCRIPT="/usr/local/bin/novaxtunnel-slowudp-cleanup.sh"
+SLOWUDP_CLEANUP_CRON_MARKER="novaxtunnel-slowudp-cleanup"
+SLOWUDP_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/evozi/hysteria-install/main/slowudp/install_server.sh"
+SLOWUDP_DEFAULT_SNI="www.bing.com"
+SLOWUDP_LISTEN_PORT="38211"
+# Plage publique dédiée à SlowUDP/Hysteria (redirigée en interne vers SLOWUDP_LISTEN_PORT).
+# Doit rester totalement disjointe des plages udp-custom et ZiVPN ci-dessus/dessous, pour
+# que les trois protocoles UDP puissent coexister sans jamais se marcher dessus.
+SLOWUDP_RANGE_START="20000"
+SLOWUDP_RANGE_END="29999"
 
 DESEC_TOKEN="V55cFY8zTictLCPfviiuX5DHjs15"
 DESEC_DOMAIN="manager.firewallfalcon.qzz.io"
@@ -517,10 +544,27 @@ _ff_flush_dnat_to_port() {
     done < <(iptables -t nat -S PREROUTING 2>/dev/null | grep -- "--to-destination :${internal_port}$")
 }
 
-
+# Rebuilds ALL managed UDP DNAT rules (udp-custom + ZiVPN) together in a single pass,
+# sorted in ascending port order. This is what guarantees the two never overlap and never
+# leave stale/overlapping leftovers - it MUST be called (not each service's own private
+# flush-and-add-its-own-segments logic) any time EITHER protocol is installed, reconfigured,
+# or uninstalled, because a change to one directly affects how the other's range must be
+# split (e.g. udp-custom must carve a hole out of its own range for ZiVPN's, and should
+# reclaim that hole if ZiVPN gets uninstalled). Only ever reserves ZiVPN's range as an
+# exclusion for udp-custom while ZiVPN is ACTUALLY installed - not just "in case".
+# Rebuilds ALL managed UDP DNAT rules (udp-custom + ZiVPN + SlowUDP/Hysteria) together in a
+# single pass, sorted in ascending port order. This is what guarantees none of the three
+# ever overlap and never leave stale/overlapping leftovers - it MUST be called (not each
+# service's own private flush-and-add-its-own-segments logic) any time ANY of the three is
+# installed, reconfigured, or uninstalled, because a change to one directly affects how the
+# others' ranges must be split (e.g. udp-custom must carve holes out of its own range for
+# both ZiVPN's and SlowUDP's, and should reclaim a hole if that protocol gets uninstalled).
+# Each protocol's range is only ever reserved as an exclusion while it's ACTUALLY installed
+# - not just "in case".
 _ff_rebuild_udp_dnat_rules() {
     _ff_flush_dnat_to_port "$UDP_CUSTOM_LISTEN_PORT"
     _ff_flush_dnat_to_port "$ZIVPN_LISTEN_PORT"
+    _ff_flush_dnat_to_port "$SLOWUDP_LISTEN_PORT"
 
     local iface
     iface=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
@@ -536,9 +580,10 @@ _ff_rebuild_udp_dnat_rules() {
         for _p in $UDP_CUSTOM_EXCLUDE_SINGLE_PORTS; do
             _udpc_excl_args+=("$_p" "$_p")
         done
-        # Only reserve ZiVPN's range for exclusion while ZiVPN is actually installed -
-        # otherwise udp-custom correctly reclaims the full range.
+        # Only reserve another protocol's range for exclusion while it's actually
+        # installed - otherwise udp-custom correctly reclaims the full range.
         [ -f "$ZIVPN_SERVICE_FILE" ] && _udpc_excl_args+=("$ZIVPN_RANGE_START" "$ZIVPN_RANGE_END")
+        [ -f "$SLOWUDP_SERVICE_FILE" ] && _udpc_excl_args+=("$SLOWUDP_RANGE_START" "$SLOWUDP_RANGE_END")
         local _seg
         while read -r _seg; do
             [ -z "$_seg" ] && continue
@@ -550,10 +595,14 @@ _ff_rebuild_udp_dnat_rules() {
         all_segments+=("$ZIVPN_RANGE_START $ZIVPN_RANGE_END $ZIVPN_LISTEN_PORT")
     fi
 
+    if [ -f "$SLOWUDP_SERVICE_FILE" ]; then
+        all_segments+=("$SLOWUDP_RANGE_START $SLOWUDP_RANGE_END $SLOWUDP_LISTEN_PORT")
+    fi
+
     (( ${#all_segments[@]} == 0 )) && return
 
     # Ascending numeric sort by range start, so the PREROUTING chain itself reads in
-    # increasing port order top-to-bottom - regardless of which order the two protocols
+    # increasing port order top-to-bottom - regardless of which order the protocols
     # happened to be installed/reinstalled in over time.
     local rs re rp
     while IFS=' ' read -r rs re rp; do
@@ -2404,10 +2453,15 @@ generate_self_signed_edge_cert() {
     local common_name="$1"
     mkdir -p "$SSL_CERT_DIR"
     echo -e "\n${C_GREEN}🔐 Generating a shared self-signed certificate...${C_RESET}"
+    # Modern clients check the Subject Alternative Name, not the CN - and an IP needs an
+    # "IP:" entry specifically - so add the right one for the VPS IP or a hostname.
+    local san_entry="DNS:$common_name"
+    _is_valid_ipv4 "$common_name" && san_entry="IP:$common_name"
     openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
         -keyout "$SSL_CERT_KEY_FILE" \
         -out "$SSL_CERT_CHAIN_FILE" \
         -subj "/CN=$common_name" \
+        -addext "subjectAltName=$san_entry" \
         >/dev/null 2>&1 || {
             echo -e "${C_RED}❌ Failed to generate the self-signed certificate.${C_RESET}"
             return 1
@@ -2613,10 +2667,470 @@ select_edge_certificate() {
     esac
 }
 
+# ===========================================================================
+# Multi-domain certificates (SNI). See the EDGE_DOMAINS_FILE comment up top.
+# ===========================================================================
+_edge_cert_paths() {
+    _EC_CHAIN="$SSL_CERT_DIR/$1.crt"
+    _EC_KEY="$SSL_CERT_DIR/$1.key"
+    _EC_PEM="$SSL_CERT_DIR/$1.pem"
+}
+
+_edge_cert_expiry() {
+    local f="$1" d
+    [ -s "$f" ] || { echo "n/a"; return; }
+    d=$(openssl x509 -enddate -noout -in "$f" 2>/dev/null | cut -d= -f2)
+    [ -z "$d" ] && { echo "n/a"; return; }
+    date -d "$d" +%F 2>/dev/null || echo "$d"
+}
+
+_edge_type_label() {
+    case "$1" in
+        cloudflare-selfsigned) echo "Cloudflare (self-signed)" ;;
+        cloudflare-origin)     echo "Cloudflare (origin cert)" ;;
+        letsencrypt)           echo "Let's Encrypt" ;;
+        custom)                echo "Custom certificate" ;;
+        *)                     echo "$1" ;;
+    esac
+}
+
+# Smallest free name: novaxtunnel1, novaxtunnel2, ... (the main certificate is plain "novaxtunnel").
+edge_domain_next_name() {
+    local n=1
+    while grep -q "^novaxtunnel${n}|" "$EDGE_DOMAINS_FILE" 2>/dev/null || [ -e "$SSL_CERT_DIR/novaxtunnel${n}.pem" ]; do
+        n=$((n + 1))
+    done
+    echo "novaxtunnel${n}"
+}
+
+_edge_build_domain_pem() {
+    _edge_cert_paths "$1"
+    [ -s "$_EC_CHAIN" ] && [ -s "$_EC_KEY" ] || return 1
+    cat "$_EC_CHAIN" "$_EC_KEY" > "$_EC_PEM" || return 1
+    chmod 644 "$_EC_CHAIN"
+    chmod 600 "$_EC_KEY" "$_EC_PEM"
+}
+
+_edge_generate_selfsigned_for() {
+    local name="$1" domain="$2"
+    _edge_cert_paths "$name"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+        -keyout "$_EC_KEY" -out "$_EC_CHAIN" \
+        -subj "/CN=$domain" -addext "subjectAltName=DNS:$domain" >/dev/null 2>&1 || return 1
+    _edge_build_domain_pem "$name"
+}
+
+# Reads a PEM block pasted in the terminal (end with a line containing only END). If the
+# first line typed is the path of an existing file, that file is copied instead.
+_edge_read_pasted_block() {
+    local label="$1" out="$2" line first=1
+    echo -e "${C_CYAN}Paste the ${label} (with its BEGIN/END lines) or give a file path, then type ${C_YELLOW}END${C_CYAN} on its own line:${C_RESET}"
+    : > "$out"
+    while IFS= read -r line; do
+        if (( first )) && [ -f "$line" ]; then
+            cp "$line" "$out"
+            break
+        fi
+        first=0
+        [[ "$line" == "END" ]] && break
+        printf '%s\n' "$line" >> "$out"
+    done
+    [ -s "$out" ]
+}
+
+_edge_install_custom_cert() {
+    local name="$1"
+    _edge_cert_paths "$name"
+    _edge_read_pasted_block "certificate" "$_EC_CHAIN" || { echo -e "${C_RED}❌ Empty certificate.${C_RESET}"; return 1; }
+    _edge_read_pasted_block "private key" "$_EC_KEY" || { echo -e "${C_RED}❌ Empty private key.${C_RESET}"; return 1; }
+    if ! openssl x509 -in "$_EC_CHAIN" -noout >/dev/null 2>&1; then
+        echo -e "${C_RED}❌ The certificate is not a valid PEM certificate.${C_RESET}"; return 1
+    fi
+    if ! openssl pkey -in "$_EC_KEY" -noout >/dev/null 2>&1; then
+        echo -e "${C_RED}❌ The private key is not a valid PEM key.${C_RESET}"; return 1
+    fi
+    local cert_pub key_pub
+    cert_pub=$(openssl x509 -in "$_EC_CHAIN" -noout -pubkey 2>/dev/null | openssl md5 2>/dev/null)
+    key_pub=$(openssl pkey -in "$_EC_KEY" -pubout 2>/dev/null | openssl md5 2>/dev/null)
+    if [[ -z "$cert_pub" || "$cert_pub" != "$key_pub" ]]; then
+        echo -e "${C_RED}❌ The private key does not match this certificate.${C_RESET}"; return 1
+    fi
+    _edge_build_domain_pem "$name"
+}
+
+# Let's Encrypt (HTTP-01, standalone) into the named files. HAProxy/Nginx hold ports 80/443,
+# so they are stopped for the validation and started again afterwards (same approach as the
+# main certificate's obtain_certbot_edge_cert).
+obtain_certbot_named_cert() {
+    local name="$1" domain="$2" email="$3" force="$4"
+    local restart_haproxy=0 restart_nginx=0 rc=1 force_flag=""
+    _edge_cert_paths "$name"
+    _install_certbot || return 1
+
+    systemctl is-active --quiet haproxy && restart_haproxy=1
+    systemctl is-active --quiet nginx && restart_nginx=1
+
+    echo -e "\n${C_BLUE}🛑 Stopping HAProxy and Nginx briefly for the Let's Encrypt validation...${C_RESET}"
+    systemctl stop haproxy >/dev/null 2>&1
+    systemctl stop nginx >/dev/null 2>&1
+    sleep 2
+
+    if check_and_free_ports "$EDGE_PUBLIC_HTTP_PORT"; then
+        [[ "$force" == "force" ]] && force_flag="--force-renewal"
+        echo -e "${C_BLUE}🚀 Requesting a Let's Encrypt certificate for ${C_YELLOW}$domain${C_RESET}"
+        # shellcheck disable=SC2086
+        if certbot certonly --standalone -d "$domain" --non-interactive --agree-tos -m "$email" $force_flag; then
+            local live_chain="/etc/letsencrypt/live/$domain/fullchain.pem"
+            local live_key="/etc/letsencrypt/live/$domain/privkey.pem"
+            if [ -f "$live_chain" ] && [ -f "$live_key" ]; then
+                cp "$live_chain" "$_EC_CHAIN"
+                cp "$live_key" "$_EC_KEY"
+                _edge_build_domain_pem "$name" && rc=0
+            else
+                echo -e "${C_RED}❌ Certbot finished but the certificate files were not found.${C_RESET}"
+            fi
+        else
+            echo -e "${C_RED}❌ Certbot failed.${C_RESET}"
+            echo -e "${C_YELLOW}ℹ️ The domain must point to this VPS (Cloudflare: grey cloud / DNS only) and port ${EDGE_PUBLIC_HTTP_PORT} must be reachable.${C_RESET}"
+        fi
+    fi
+
+    [[ "$restart_nginx" -eq 1 ]] && systemctl start nginx >/dev/null 2>&1
+    [[ "$restart_haproxy" -eq 1 ]] && systemctl start haproxy >/dev/null 2>&1
+    return $rc
+}
+
+# Weekly check: renews any Let's Encrypt domain certificate that has less than 21 days left.
+_edge_install_renew_cron() {
+    cat > "$EDGE_RENEW_SCRIPT" <<EOF
+#!/bin/bash
+# NOVA XTUNNEL - renews Let's Encrypt certificates of the extra domains (novaxtunnelN)
+SSL_CERT_DIR="$SSL_CERT_DIR"
+EDGE_DOMAINS_FILE="$EDGE_DOMAINS_FILE"
+EDGE_PUBLIC_HTTP_PORT="$EDGE_PUBLIC_HTTP_PORT"
+EOF
+    cat >> "$EDGE_RENEW_SCRIPT" <<'EOF'
+command -v certbot >/dev/null 2>&1 || exit 0
+[ -f "$EDGE_DOMAINS_FILE" ] || exit 0
+while IFS='|' read -r name domain type email created; do
+    [ "$type" = "letsencrypt" ] || continue
+    chain="$SSL_CERT_DIR/$name.crt"
+    key="$SSL_CERT_DIR/$name.key"
+    if [ -s "$chain" ] && openssl x509 -checkend 1814400 -noout -in "$chain" >/dev/null 2>&1; then
+        continue
+    fi
+    ha=0; ng=0
+    systemctl is-active --quiet haproxy && ha=1
+    systemctl is-active --quiet nginx && ng=1
+    [ $ha -eq 1 ] && systemctl stop haproxy >/dev/null 2>&1
+    [ $ng -eq 1 ] && systemctl stop nginx >/dev/null 2>&1
+    sleep 2
+    if certbot certonly --standalone -d "$domain" --non-interactive --agree-tos -m "$email" --force-renewal >/dev/null 2>&1; then
+        if [ -f "/etc/letsencrypt/live/$domain/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$domain/privkey.pem" ]; then
+            cp "/etc/letsencrypt/live/$domain/fullchain.pem" "$chain"
+            cp "/etc/letsencrypt/live/$domain/privkey.pem" "$key"
+            cat "$chain" "$key" > "$SSL_CERT_DIR/$name.pem"
+            chmod 600 "$key" "$SSL_CERT_DIR/$name.pem"
+        fi
+    fi
+    [ $ng -eq 1 ] && systemctl start nginx >/dev/null 2>&1
+    [ $ha -eq 1 ] && systemctl start haproxy >/dev/null 2>&1
+done < "$EDGE_DOMAINS_FILE"
+EOF
+    chmod +x "$EDGE_RENEW_SCRIPT"
+    (crontab -l 2>/dev/null | grep -v "$EDGE_RENEW_CRON_MARKER"; echo "0 4 * * 1 $EDGE_RENEW_SCRIPT # $EDGE_RENEW_CRON_MARKER") | crontab -
+}
+
+# "crt <main> crt <domain1> ..." for HAProxy. The FIRST certificate is HAProxy's default
+# (used when the SNI matches nothing, e.g. a connection straight to the VPS IP), so the main
+# self-signed "novaxtunnel" must stay first.
+build_haproxy_crt_args() {
+    local args="crt ${SSL_CERT_FILE}" name domain type email created
+    if [ -f "$EDGE_DOMAINS_FILE" ]; then
+        while IFS='|' read -r name domain type email created; do
+            [ -z "$name" ] && continue
+            [ -s "$SSL_CERT_DIR/$name.pem" ] && args+=" crt $SSL_CERT_DIR/$name.pem"
+        done < "$EDGE_DOMAINS_FILE"
+    fi
+    echo "$args"
+}
+
+_edge_reload_service() {
+    local svc="$1"
+    if systemctl is-active --quiet "$svc"; then
+        systemctl reload "$svc" 2>/dev/null || systemctl restart "$svc"
+    else
+        systemctl start "$svc"
+    fi
+}
+
+# Rewrites the HAProxy + Nginx configs with the current domain list, validates both (rolling
+# back to the previous files if either is rejected) and reloads them without a full restart.
+apply_edge_domains() {
+    if ! grep -q "frontend internal_decryptor" "$HAPROXY_CONFIG" 2>/dev/null; then
+        echo -e "${C_DIM}ℹ️ The HAProxy Edge Stack isn't installed yet - the certificates are saved and will be used as soon as you install it from Protocol Manager.${C_RESET}"
+        return 0
+    fi
+    load_edge_cert_info
+    local server_name="${EDGE_DOMAIN:-$(detect_preferred_host)}"
+    [[ -z "$server_name" ]] && server_name="_"
+
+    local prev_ha="/tmp/novaxtunnel-haproxy.prev" prev_ng="/tmp/novaxtunnel-nginx.prev"
+    cp -f "$HAPROXY_CONFIG" "$prev_ha"
+    [ -f "$NGINX_CONFIG_FILE" ] && cp -f "$NGINX_CONFIG_FILE" "$prev_ng"
+
+    echo -e "${C_BLUE}📝 Updating Nginx and HAProxy for the current domain list...${C_RESET}"
+    write_internal_nginx_config "$server_name"
+    write_haproxy_edge_config
+
+    if ! nginx -t >/dev/null 2>&1 || ! haproxy -c -f "$HAPROXY_CONFIG" >/dev/null 2>&1; then
+        echo -e "${C_RED}❌ The new configuration was rejected - restoring the previous one.${C_RESET}"
+        nginx -t 2>&1 | tail -n 5
+        haproxy -c -f "$HAPROXY_CONFIG" 2>&1 | tail -n 5
+        cp -f "$prev_ha" "$HAPROXY_CONFIG"
+        [ -f "$prev_ng" ] && cp -f "$prev_ng" "$NGINX_CONFIG_FILE"
+        return 1
+    fi
+
+    _edge_reload_service nginx
+    _edge_reload_service haproxy
+    sleep 1
+    if ! systemctl is-active --quiet haproxy || ! systemctl is-active --quiet nginx; then
+        echo -e "${C_RED}❌ HAProxy or Nginx is not active after the reload. Check: journalctl -u haproxy -u nginx${C_RESET}"
+        return 1
+    fi
+    echo -e "${C_GREEN}✅ Domains applied (live connections were kept).${C_RESET}"
+    return 0
+}
+
+_edge_valid_domain() {
+    [[ "$1" =~ ^(\*\.)?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]]
+}
+
+edge_domain_add() {
+    echo -e "\n${C_BOLD}Certificate type for this domain:${C_RESET}"
+    echo -e "  ${C_CHOICE}[1]${C_RESET} ☁️ Cloudflare proxied (orange cloud)"
+    echo -e "  ${C_CHOICE}[2]${C_RESET} 🔒 Let's Encrypt (grey cloud / DNS only / any domain pointing to this VPS)"
+    echo -e "  ${C_CHOICE}[3]${C_RESET} 📄 Other domain - use my own certificate + key"
+    echo -e "  ${C_WARN}[0]${C_RESET} ↩️ Cancel"
+    read -p "👉 Choice: " tchoice
+    local type=""
+    case "$tchoice" in
+        1) type="cloudflare-selfsigned" ;;
+        2) type="letsencrypt" ;;
+        3) type="custom" ;;
+        *) return 0 ;;
+    esac
+
+    local domain
+    read -p "👉 Domain name (e.g. cdn.example.com): " domain
+    domain="${domain,,}"; domain="${domain// /}"
+    if [[ -z "$domain" ]] || _is_valid_ipv4 "$domain" || ! _edge_valid_domain "$domain"; then
+        echo -e "${C_RED}❌ Invalid domain name (a raw IP always uses the main certificate).${C_RESET}"; return 1
+    fi
+    if [[ "$type" == "letsencrypt" && "$domain" == \** ]]; then
+        echo -e "${C_RED}❌ Let's Encrypt wildcards need a DNS challenge - add the exact hostname instead.${C_RESET}"; return 1
+    fi
+    load_edge_cert_info
+    if grep -qiF "|${domain}|" "$EDGE_DOMAINS_FILE" 2>/dev/null || [[ "$domain" == "${EDGE_DOMAIN,,}" ]]; then
+        echo -e "${C_RED}❌ This domain is already configured.${C_RESET}"; return 1
+    fi
+
+    local name email=""
+    name=$(edge_domain_next_name)
+    _edge_cert_paths "$name"
+
+    case "$type" in
+        cloudflare-selfsigned)
+            echo -e "\n  ${C_CHOICE}[1]${C_RESET} Self-signed (Cloudflare SSL mode must be ${C_YELLOW}Full${C_RESET})"
+            echo -e "  ${C_CHOICE}[2]${C_RESET} Cloudflare Origin Certificate (works with ${C_YELLOW}Full (strict)${C_RESET})"
+            read -p "👉 Choice [1]: " cfchoice
+            if [[ "$cfchoice" == "2" ]]; then
+                type="cloudflare-origin"
+                _edge_install_custom_cert "$name" || { rm -f "$_EC_CHAIN" "$_EC_KEY" "$_EC_PEM"; return 1; }
+            else
+                echo -e "${C_GREEN}🔐 Generating a self-signed certificate for ${domain}...${C_RESET}"
+                _edge_generate_selfsigned_for "$name" "$domain" || { echo -e "${C_RED}❌ Certificate generation failed.${C_RESET}"; rm -f "$_EC_CHAIN" "$_EC_KEY" "$_EC_PEM"; return 1; }
+            fi
+            ;;
+        letsencrypt)
+            local last_email
+            last_email=$(awk -F'|' '$3=="letsencrypt" && $4!="" {e=$4} END{print e}' "$EDGE_DOMAINS_FILE" 2>/dev/null)
+            last_email="${last_email:-$EDGE_EMAIL}"
+            read -p "👉 Email for Let's Encrypt${last_email:+ [$last_email]}: " email
+            email="${email:-$last_email}"
+            [[ -z "$email" ]] && { echo -e "${C_RED}❌ Email cannot be empty.${C_RESET}"; return 1; }
+            local vps_ip dom_ip
+            vps_ip=$(curl -s -4 --max-time 5 icanhazip.com 2>/dev/null | tr -d '[:space:]')
+            dom_ip=$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1; exit}')
+            if [[ -n "$vps_ip" && "$dom_ip" != "$vps_ip" ]]; then
+                echo -e "${C_YELLOW}⚠️ ${domain} resolves to '${dom_ip:-nothing}', not to this VPS (${vps_ip}).${C_RESET}"
+                echo -e "${C_YELLOW}   On Cloudflare, switch the record to grey cloud (DNS only) until the certificate is issued.${C_RESET}"
+                read -p "👉 Continue anyway? (y/n): " go
+                [[ "$go" == "y" || "$go" == "Y" ]] || return 1
+            fi
+            check_and_open_firewall_port "$EDGE_PUBLIC_HTTP_PORT" tcp || return 1
+            obtain_certbot_named_cert "$name" "$domain" "$email" || { rm -f "$_EC_CHAIN" "$_EC_KEY" "$_EC_PEM"; return 1; }
+            ;;
+        custom)
+            _edge_install_custom_cert "$name" || { rm -f "$_EC_CHAIN" "$_EC_KEY" "$_EC_PEM"; return 1; }
+            ;;
+    esac
+
+    echo "${name}|${domain}|${type}|${email}|$(date +%F)" >> "$EDGE_DOMAINS_FILE"
+    [[ "$type" == "letsencrypt" ]] && _edge_install_renew_cron
+
+    if ! apply_edge_domains; then
+        sed -i "/^${name}|/d" "$EDGE_DOMAINS_FILE"
+        rm -f "$_EC_CHAIN" "$_EC_KEY" "$_EC_PEM"
+        echo -e "${C_RED}❌ ${domain} was not added.${C_RESET}"
+        return 1
+    fi
+    echo -e "\n${C_GREEN}✅ ${domain} added with certificate ${C_YELLOW}${name}${C_RESET}"
+}
+
+edge_domain_remove() {
+    local num="$1" name="$2" domain="$3" type="$4"
+    read -p "👉 Remove ${domain} (${name})? (y/n): " confirm
+    [[ "$confirm" == "y" || "$confirm" == "Y" ]] || return 0
+    _edge_cert_paths "$name"
+    sed -i "/^${name}|/d" "$EDGE_DOMAINS_FILE"
+    rm -f "$_EC_CHAIN" "$_EC_KEY" "$_EC_PEM"
+    [[ "$type" == "letsencrypt" ]] && certbot delete --cert-name "$domain" --non-interactive >/dev/null 2>&1
+    apply_edge_domains
+    echo -e "${C_GREEN}✅ ${domain} removed.${C_RESET}"
+}
+
+edge_domain_renew() {
+    local name="$1" domain="$2" type="$3" email="$4"
+    _edge_cert_paths "$name"
+    cp -f "$_EC_CHAIN" "$_EC_CHAIN.bak" 2>/dev/null; cp -f "$_EC_KEY" "$_EC_KEY.bak" 2>/dev/null
+    local ok=1
+    case "$type" in
+        letsencrypt)           obtain_certbot_named_cert "$name" "$domain" "$email" force && ok=0 ;;
+        cloudflare-selfsigned) _edge_generate_selfsigned_for "$name" "$domain" && ok=0 ;;
+        *)                     _edge_install_custom_cert "$name" && ok=0 ;;
+    esac
+    if (( ok != 0 )); then
+        mv -f "$_EC_CHAIN.bak" "$_EC_CHAIN" 2>/dev/null; mv -f "$_EC_KEY.bak" "$_EC_KEY" 2>/dev/null
+        _edge_build_domain_pem "$name"
+        echo -e "${C_RED}❌ Renewal failed - the previous certificate was kept.${C_RESET}"
+        return 1
+    fi
+    rm -f "$_EC_CHAIN.bak" "$_EC_KEY.bak"
+    apply_edge_domains
+    echo -e "${C_GREEN}✅ Certificate for ${domain} renewed.${C_RESET}"
+}
+
+edge_domains_menu() {
+    mkdir -p "$SSL_CERT_DIR"
+    touch "$EDGE_DOMAINS_FILE"
+    while true; do
+        clear; show_banner
+        echo -e "${C_BOLD}${C_PURPLE}--- 🌍 Domains & Certificates (SNI) ---${C_RESET}"
+        echo -e "${C_DIM}Several domains can run at the same time: HAProxy and Nginx choose the certificate from the SNI/hostname the client asks for.${C_RESET}"
+        echo -e "${C_DIM}The VPS IP (and any unknown SNI) always uses the main self-signed certificate 'novaxtunnel'.${C_RESET}"
+
+        load_edge_cert_info
+        local main_state="not created yet (created by the HAProxy Edge Stack install)"
+        [ -s "$SSL_CERT_FILE" ] && main_state="expires $(_edge_cert_expiry "$SSL_CERT_CHAIN_FILE")"
+        echo -e "\n${C_CYAN}Main certificate (default):${C_RESET}"
+        printf "  ${C_GREEN}%-14s${C_RESET} %-30s %s\n" "novaxtunnel" "${EDGE_CERT_MODE:-self-signed} - VPS IP / any SNI" "$main_state"
+
+        local -a names=() domains=() types=() emails=()
+        local name domain type email created
+        while IFS='|' read -r name domain type email created; do
+            [ -z "$name" ] && continue
+            names+=("$name"); domains+=("$domain"); types+=("$type"); emails+=("$email")
+        done < "$EDGE_DOMAINS_FILE"
+
+        echo -e "\n${C_CYAN}Domains:${C_RESET}"
+        if (( ${#names[@]} == 0 )); then
+            echo -e "  ${C_DIM}No domain added yet${C_RESET}"
+        else
+            local i
+            for i in "${!names[@]}"; do
+                _edge_cert_paths "${names[$i]}"
+                printf "  ${C_GREEN}[%d]${C_RESET} ${C_YELLOW}%-13s${C_RESET} %-32s %-26s %s\n" \
+                    "$((i + 1))" "${names[$i]}" "${domains[$i]}" "$(_edge_type_label "${types[$i]}")" "expires $(_edge_cert_expiry "$_EC_CHAIN")"
+            done
+        fi
+
+        echo -e "\n${C_BOLD}Options:${C_RESET}"
+        echo -e "  ${C_GREEN}[1] Add a domain${C_RESET}"
+        echo -e "  ${C_GREEN}[2] Remove a domain${C_RESET}"
+        echo -e "  ${C_GREEN}[3] Renew / replace a domain certificate${C_RESET}"
+        echo -e "  ${C_RED}[0] Back${C_RESET}"
+        read -r -p "👉 Choice: " choice
+
+        case "$choice" in
+            1) edge_domain_add ;;
+            2|3)
+                if (( ${#names[@]} == 0 )); then echo -e "${C_YELLOW}No domain to manage.${C_RESET}"; sleep 1; continue; fi
+                read -r -p "👉 Domain number: " num
+                if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt ${#names[@]} ]; then
+                    echo "❌ Invalid"; sleep 1; continue
+                fi
+                local idx=$((num - 1))
+                if [[ "$choice" == "2" ]]; then
+                    edge_domain_remove "$num" "${names[$idx]}" "${domains[$idx]}" "${types[$idx]}"
+                else
+                    edge_domain_renew "${names[$idx]}" "${domains[$idx]}" "${types[$idx]}" "${emails[$idx]}"
+                fi
+                ;;
+            0) return ;;
+            *) invalid_option; continue ;;
+        esac
+        read -r -p $'\nPress Enter to continue...' _
+    done
+}
+
 write_internal_nginx_config() {
     local server_name="$1"
     [[ -z "$server_name" ]] && server_name="_"
-    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
+
+    # The proxy locations are identical for every domain, so they live in one shared snippet
+    # included by each server block (quoted heredoc: the nginx $variables stay literal).
+    cat > "$NGINX_LOCATIONS_SNIPPET" <<'EOF'
+    location ~ ^/(?<fwdport>\d+)/(?<fwdpath>.*)$ {
+        client_max_body_size 0;
+        client_body_timeout 1d;
+        grpc_read_timeout 1d;
+        grpc_socket_keepalive on;
+        proxy_read_timeout 1d;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_socket_keepalive on;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        if ($content_type ~* "GRPC") { grpc_pass grpc://127.0.0.1:$fwdport$is_args$args; break; }
+        proxy_pass http://127.0.0.1:$fwdport$is_args$args;
+        break;
+    }
+
+    location / {
+        proxy_read_timeout 3600s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_http_version 1.1;
+        proxy_socket_keepalive on;
+        tcp_nodelay on;
+        tcp_nopush off;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+EOF
+
+    # Default server: main self-signed certificate "novaxtunnel" (VPS IP / unknown SNI).
     cat > "$NGINX_CONFIG_FILE" <<EOF
 server {
     listen 127.0.0.1:${NGINX_INTERNAL_HTTP_PORT} default_server;
@@ -2630,48 +3144,42 @@ server {
     ssl_ciphers HIGH:!aNULL:!eNULL:!MD5:!DES:!RC4:!ADH:!SSLv3:!EXP:!PSK:!DSS;
     resolver 1.1.1.1 8.8.8.8 ipv6=off valid=300s;
 
-    location ~ ^/(?<fwdport>\d+)/(?<fwdpath>.*)$ {
-        client_max_body_size 0;
-        client_body_timeout 1d;
-        grpc_read_timeout 1d;
-        grpc_socket_keepalive on;
-        proxy_read_timeout 1d;
-        proxy_http_version 1.1;
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_socket_keepalive on;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        if (\$content_type ~* "GRPC") { grpc_pass grpc://127.0.0.1:\$fwdport\$is_args\$args; break; }
-        proxy_pass http://127.0.0.1:\$fwdport\$is_args\$args;
-        break;
-    }
-
-    location / {
-        proxy_read_timeout 3600s;
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_http_version 1.1;
-        proxy_socket_keepalive on;
-        tcp_nodelay on;
-        tcp_nopush off;
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
+    include ${NGINX_LOCATIONS_SNIPPET};
 }
 EOF
+
+    # One extra TLS server per domain, each with its own certificate (picked from the SNI).
+    local name domain type email created
+    if [ -f "$EDGE_DOMAINS_FILE" ]; then
+        while IFS='|' read -r name domain type email created; do
+            [ -z "$name" ] && continue
+            [ -s "$SSL_CERT_DIR/$name.crt" ] && [ -s "$SSL_CERT_DIR/$name.key" ] || continue
+            cat >> "$NGINX_CONFIG_FILE" <<EOF
+
+server {
+    listen 127.0.0.1:${NGINX_INTERNAL_TLS_PORT} ssl http2;
+    server_tokens off;
+    server_name ${domain};
+
+    ssl_certificate ${SSL_CERT_DIR}/${name}.crt;
+    ssl_certificate_key ${SSL_CERT_DIR}/${name}.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!eNULL:!MD5:!DES:!RC4:!ADH:!SSLv3:!EXP:!PSK:!DSS;
+    resolver 1.1.1.1 8.8.8.8 ipv6=off valid=300s;
+
+    include ${NGINX_LOCATIONS_SNIPPET};
+}
+EOF
+        done < "$EDGE_DOMAINS_FILE"
+    fi
+
     ln -sf "$NGINX_CONFIG_FILE" /etc/nginx/sites-enabled/default
 }
 
 write_haproxy_edge_config() {
     mkdir -p /etc/haproxy
+    local crt_args
+    crt_args=$(build_haproxy_crt_args)
     cat > "$HAPROXY_CONFIG" <<EOF
 global
     log /dev/log local0
@@ -2737,15 +3245,26 @@ frontend port_443_edge
 # TIER 2: INTERNAL DECRYPTOR (Only for Any-SNI SSH-TLS)
 # ====================================================================
 frontend internal_decryptor
-    bind 127.0.0.1:${HAPROXY_INTERNAL_DECRYPT_PORT} ssl crt ${SSL_CERT_FILE}
+    bind 127.0.0.1:${HAPROXY_INTERNAL_DECRYPT_PORT} ssl ${crt_args}
     mode tcp
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
+    # SSH + SNI + payload: the client does a TLS handshake (any SNI), THEN sends an HTTP
+    # payload inside the tunnel (e.g. "GET / HTTP/1.1 ... Upgrade: websocket" or
+    # "CONNECT host:port") and expects the 101/200 reply followed by the raw SSH stream.
+    # Once decrypted here that payload starts with an HTTP verb - without these rules it
+    # fell through to nginx_cleartext (which just proxies to a web app), so the SSH
+    # handshake never started. Send it to the same payload proxies the plain-text ports use.
+    acl is_connect payload(0,7) -m reg "^CONNECT"
+    acl is_payload payload(0,7) -m reg "^(GET|POST|OPTIONS|ACL|TRACE|CONNECT|PATCH|HEAD|PUT|DELETE|POLL|HTTP/)"
     tcp-request content accept if is_ssh
+    tcp-request content accept if is_payload
     tcp-request content accept if HTTP
 
     use_backend direct_ssh if is_ssh
+    use_backend direct_sshp if is_connect
+    use_backend direct_ssht if is_payload
     default_backend nginx_cleartext
 
 # ====================================================================
@@ -2812,7 +3331,7 @@ configure_edge_stack() {
         return 1
     fi
 
-    systemctl daemon-reload   
+    systemctl daemon-reload
     systemctl enable nginx >/dev/null 2>&1
     systemctl enable haproxy >/dev/null 2>&1
 
@@ -2932,6 +3451,7 @@ EOF
             systemctl stop nginx >/dev/null 2>&1
         fi
         rm -f "$SSL_CERT_FILE" "$SSL_CERT_CHAIN_FILE" "$SSL_CERT_KEY_FILE" "$EDGE_CERT_INFO_FILE"
+        rm -f "$SSL_CERT_DIR"/novaxtunnel[0-9]*.pem "$SSL_CERT_DIR"/novaxtunnel[0-9]*.crt "$SSL_CERT_DIR"/novaxtunnel[0-9]*.key "$EDGE_DOMAINS_FILE"
         rm -f "$NGINX_PORTS_FILE"
         echo -e "${C_GREEN}🗑️ Shared certificate files removed.${C_RESET}"
     fi
@@ -3269,7 +3789,6 @@ install_zivpn() {
         return
     fi
 
-.
     echo -e "\n${C_GREEN}⚙️ Checking system architecture...${C_RESET}"
     local arch=$(uname -m)
     local zivpn_url=""
@@ -3428,6 +3947,399 @@ uninstall_zivpn() {
     sync; echo 3 > /proc/sys/vm/drop_caches
 
     echo -e "\n${C_GREEN}✅ ZiVPN Uninstalled Successfully.${C_RESET}"
+}
+
+install_slowudp() {
+    clear; show_banner
+    echo -e "${C_BOLD}${C_PURPLE}--- 🚀 Installing SlowUDP (Hysteria) ---${C_RESET}"
+
+    if [ -f "$SLOWUDP_SERVICE_FILE" ]; then
+        echo -e "\n${C_YELLOW}ℹ️ SlowUDP is already installed.${C_RESET}"
+        return
+    fi
+
+    # The official installer handles GitHub release resolution, OS/arch detection, the
+    # slowudp binary, the systemd service files, and a dedicated system user - all fully
+    # non-interactively when run with no arguments. We overwrite its example config
+    # ourselves right after with a multi-password-ready one (see below).
+    echo -e "\n${C_GREEN}📦 Downloading and running the official SlowUDP installer...${C_RESET}"
+    if ! bash <(curl -fsSL "$SLOWUDP_INSTALL_SCRIPT_URL"); then
+        echo -e "${C_RED}❌ SlowUDP installation failed. Check your internet connection.${C_RESET}"
+        return
+    fi
+
+    if [ ! -f "$SLOWUDP_BIN" ]; then
+        echo -e "${C_RED}❌ SlowUDP binary not found after installation.${C_RESET}"
+        return
+    fi
+
+    echo -e "\n${C_GREEN}🔐 Generating self-signed certificate...${C_RESET}"
+    if ! command -v openssl &>/dev/null; then
+        ff_apt_install openssl >/dev/null 2>&1 || {
+            echo -e "${C_RED}❌ Failed to install openssl for SlowUDP certificate generation.${C_RESET}"
+            return
+        }
+    fi
+    mkdir -p "$SLOWUDP_DIR"
+    openssl ecparam -genkey -name prime256v1 -out "$SLOWUDP_KEY_FILE" 2>/dev/null
+    openssl req -new -x509 -days 36500 -key "$SLOWUDP_KEY_FILE" -out "$SLOWUDP_CERT_FILE" \
+        -subj "/CN=${SLOWUDP_DEFAULT_SNI}" 2>/dev/null
+    chmod 600 "$SLOWUDP_KEY_FILE"
+
+    echo -e "${C_BLUE}⚙️ Writing multi-account configuration...${C_RESET}"
+    # "passwords" auth mode accepts an array of valid passwords - this is what lets us
+    # manage several independent SlowUDP accounts on the same server/port, the same way
+    # ZiVPN's password list works. Starts empty; accounts are added via the manager below.
+    cat <<EOF > "$SLOWUDP_CONFIG_FILE"
+{
+  "protocol": "udp",
+  "listen": ":${SLOWUDP_LISTEN_PORT}",
+  "resolve_preference": "46",
+  "cert": "$SLOWUDP_CERT_FILE",
+  "key": "$SLOWUDP_KEY_FILE",
+  "alpn": "h3",
+  "obfs": "",
+  "auth": {
+    "mode": "passwords",
+    "config": []
+  }
+}
+EOF
+
+    echo -e "\n${C_GREEN}🚀 Starting SlowUDP Service...${C_RESET}"
+    systemctl daemon-reload
+    systemctl enable slowudp-server.service >/dev/null 2>&1
+    systemctl restart slowudp-server.service
+
+    echo -e "${C_BLUE}🔥 Configuring Firewall Rules (Redirecting ${SLOWUDP_RANGE_START}-${SLOWUDP_RANGE_END} -> ${SLOWUDP_LISTEN_PORT})...${C_RESET}"
+    _ff_rebuild_udp_dnat_rules
+    if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+        ufw allow "${SLOWUDP_LISTEN_PORT}/udp" >/dev/null
+    fi
+
+    if systemctl is-active --quiet slowudp-server.service; then
+        echo -e "\n${C_GREEN}✅ SlowUDP Installed Successfully!${C_RESET}"
+        echo -e "   - UDP Port: ${SLOWUDP_LISTEN_PORT} (Direct)"
+        echo -e "   - UDP Ports: ${SLOWUDP_RANGE_START}-${SLOWUDP_RANGE_END} (Forwarded)"
+        echo -e "   - SNI: ${SLOWUDP_DEFAULT_SNI} (self-signed cert)"
+        echo -e "${C_DIM}   Use 'SlowUDP Hysteria Manager' from the VPN & Protocols menu to create accounts.${C_RESET}"
+    else
+        echo -e "\n${C_RED}❌ SlowUDP Service failed to start. Check logs: journalctl -u slowudp-server.service${C_RESET}"
+    fi
+}
+
+uninstall_slowudp() {
+    clear; show_banner
+    echo -e "${C_BOLD}${C_PURPLE}--- 🗑️ Uninstall SlowUDP (Hysteria) ---${C_RESET}"
+
+    if [ ! -f "$SLOWUDP_SERVICE_FILE" ] && [ ! -f "$SLOWUDP_BIN" ]; then
+        echo -e "\n${C_YELLOW}ℹ️ SlowUDP does not appear to be installed.${C_RESET}"
+        return
+    fi
+
+    read -p "👉 Are you sure you want to uninstall SlowUDP? (y/n): " confirm
+    if [[ "$confirm" != "y" ]]; then echo -e "${C_YELLOW}Cancelled.${C_RESET}"; return; fi
+
+    echo -e "\n${C_BLUE}🛑 Stopping services...${C_RESET}"
+    systemctl stop slowudp-server.service >/dev/null 2>&1
+    systemctl disable slowudp-server.service >/dev/null 2>&1
+
+    echo -e "${C_BLUE}🗑️ Removing files...${C_RESET}"
+    rm -f "$SLOWUDP_SERVICE_FILE" "$SLOWUDP_SERVICE_X_FILE"
+    rm -rf "$SLOWUDP_DIR"
+    rm -f "$SLOWUDP_BIN"
+    rm -f "$SLOWUDP_CLEANUP_SCRIPT"
+    (crontab -l 2>/dev/null | grep -v "$SLOWUDP_CLEANUP_CRON_MARKER") | crontab - 2>/dev/null
+
+    systemctl daemon-reload
+
+    echo -e "${C_BLUE}🔥 Removing firewall redirect rules (reclaiming range for udp-custom if installed)...${C_RESET}"
+    _ff_rebuild_udp_dnat_rules
+
+    echo -e "\n${C_GREEN}✅ SlowUDP Uninstalled Successfully.${C_RESET}"
+}
+
+_slowudp_meta_init() {
+    mkdir -p "$SLOWUDP_DIR" 2>/dev/null
+    if [ ! -f "$SLOWUDP_META_FILE" ]; then
+        echo '{}' > "$SLOWUDP_META_FILE"
+    fi
+}
+
+# Get a metadata field ("expires" or "quota_gb") for a password. Prints "never" / "unlimited" if unset.
+_slowudp_meta_get() {
+    local pwd="$1" field="$2" default_val="$3"
+    _slowudp_meta_init
+    local val
+    val=$(jq -r --arg p "$pwd" --arg f "$field" '.[$p][$f] // empty' "$SLOWUDP_META_FILE" 2>/dev/null)
+    [ -z "$val" ] && val="$default_val"
+    echo "$val"
+}
+
+_slowudp_meta_set() {
+    local pwd="$1" expires="$2" quota_gb="$3"
+    _slowudp_meta_init
+    local today; today=$(date +%F)
+    jq --arg p "$pwd" --arg e "$expires" --arg q "$quota_gb" --arg c "$today" \
+        '.[$p] = {expires: $e, quota_gb: $q, created: (.[$p].created // $c)}' \
+        "$SLOWUDP_META_FILE" > /tmp/slowudp_meta.json && mv /tmp/slowudp_meta.json "$SLOWUDP_META_FILE"
+}
+
+_slowudp_meta_rename() {
+    local old_pwd="$1" new_pwd="$2"
+    _slowudp_meta_init
+    jq --arg o "$old_pwd" --arg n "$new_pwd" \
+        'if has($o) then .[$n] = .[$o] | del(.[$o]) else . end' \
+        "$SLOWUDP_META_FILE" > /tmp/slowudp_meta.json && mv /tmp/slowudp_meta.json "$SLOWUDP_META_FILE"
+}
+
+_slowudp_meta_delete() {
+    local pwd="$1"
+    _slowudp_meta_init
+    jq --arg p "$pwd" 'del(.[$p])' "$SLOWUDP_META_FILE" > /tmp/slowudp_meta.json && mv /tmp/slowudp_meta.json "$SLOWUDP_META_FILE"
+}
+
+# Prompts for an expiration date and a data quota, used by Add/Edit flows.
+# Sets globals: _SU_EXPIRES, _SU_QUOTA
+# NOTE on quota: SlowUDP/Hysteria's "passwords" auth mode has no per-password traffic
+# accounting (unlike a per-user OS process, every account shares one UDP listener, so
+# iptables byte counters can't tell them apart either). The quota is stored and shown for
+# record-keeping, but is NOT actively enforced - only the expiration date is. This is
+# called out again in the manager's UI so it's never presented as more than it is.
+_slowudp_prompt_expiry_quota() {
+    local default_expires="$1" default_quota="$2"
+    _SU_EXPIRES="$default_expires"
+    _SU_QUOTA="$default_quota"
+
+    read -r -p "👉 Nombre de jours avant expiration (0 = never, laisser vide = garder '${default_expires}'): " in_days
+    if [ -n "$in_days" ]; then
+        if [[ "$in_days" == "never" ]] || [[ "$in_days" =~ ^[0-9]+$ && "$in_days" -eq 0 ]]; then
+            _SU_EXPIRES="never"
+        elif [[ "$in_days" =~ ^[0-9]+$ ]]; then
+            _SU_EXPIRES=$(date -d "+${in_days} days" +%F)
+        else
+            echo -e "${C_YELLOW}⚠️ Valeur invalide, on garde '${default_expires}'.${C_RESET}"
+        fi
+    fi
+
+    read -r -p "👉 Data quota in GB (record-keeping only, not enforced - see note below), 'unlimited', or blank to keep '${default_quota}': " in_quota
+    if [ -n "$in_quota" ]; then
+        if [[ "$in_quota" == "unlimited" ]]; then
+            _SU_QUOTA="unlimited"
+        elif [[ "$in_quota" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            _SU_QUOTA="$in_quota"
+        else
+            echo -e "${C_YELLOW}⚠️ Invalid quota, keeping '${default_quota}'.${C_RESET}"
+        fi
+    fi
+}
+
+# Removes any SlowUDP password whose expiry date has passed. Safe to run repeatedly (cron/manual).
+slowudp_cleanup_expired_passwords() {
+    _slowudp_meta_init
+    [ -f "$SLOWUDP_CONFIG_FILE" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+
+    local today; today=$(date +%F)
+    local removed_any=false
+    local expired_pwds
+    expired_pwds=$(jq -r --arg today "$today" \
+        'to_entries[] | select(.value.expires != null and .value.expires != "never" and .value.expires != "" and (.value.expires < $today)) | .key' \
+        "$SLOWUDP_META_FILE" 2>/dev/null)
+
+    while IFS= read -r pwd; do
+        [ -z "$pwd" ] && continue
+        jq --arg p "$pwd" '.auth.config -= [$p]' "$SLOWUDP_CONFIG_FILE" > /tmp/slowudp.json 2>/dev/null && mv /tmp/slowudp.json "$SLOWUDP_CONFIG_FILE"
+        _slowudp_meta_delete "$pwd"
+        removed_any=true
+    done <<< "$expired_pwds"
+
+    if $removed_any; then
+        systemctl restart slowudp-server.service 2>/dev/null
+    fi
+}
+
+# Installs a cron job that periodically sweeps expired SlowUDP passwords (additive only,
+# does not touch the already-installed slowudp service/binary/config).
+_slowudp_install_cleanup_cron() {
+    cat > "$SLOWUDP_CLEANUP_SCRIPT" << CLEOF
+#!/bin/bash
+# NOVA XTUNNEL - SlowUDP expired password sweeper
+SLOWUDP_CONFIG_FILE="$SLOWUDP_CONFIG_FILE"
+SLOWUDP_META_FILE="$SLOWUDP_META_FILE"
+command -v jq >/dev/null 2>&1 || exit 0
+[ -f "\$SLOWUDP_CONFIG_FILE" ] || exit 0
+[ -f "\$SLOWUDP_META_FILE" ] || exit 0
+today=\$(date +%F)
+removed_any=false
+expired_pwds=\$(jq -r --arg today "\$today" \
+    'to_entries[] | select(.value.expires != null and .value.expires != "never" and .value.expires != "" and (.value.expires < \$today)) | .key' \
+    "\$SLOWUDP_META_FILE" 2>/dev/null)
+while IFS= read -r pwd; do
+    [ -z "\$pwd" ] && continue
+    jq --arg p "\$pwd" '.auth.config -= [\$p]' "\$SLOWUDP_CONFIG_FILE" > /tmp/slowudp_cron.json 2>/dev/null && mv /tmp/slowudp_cron.json "\$SLOWUDP_CONFIG_FILE"
+    jq --arg p "\$pwd" 'del(.[\$p])' "\$SLOWUDP_META_FILE" > /tmp/slowudp_meta_cron.json 2>/dev/null && mv /tmp/slowudp_meta_cron.json "\$SLOWUDP_META_FILE"
+    removed_any=true
+done <<< "\$expired_pwds"
+if [ "\$removed_any" = "true" ]; then
+    systemctl restart slowudp-server.service 2>/dev/null
+fi
+CLEOF
+    chmod +x "$SLOWUDP_CLEANUP_SCRIPT"
+
+    (crontab -l 2>/dev/null | grep -v "$SLOWUDP_CLEANUP_CRON_MARKER") | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null; echo "*/15 * * * * $SLOWUDP_CLEANUP_SCRIPT # $SLOWUDP_CLEANUP_CRON_MARKER") | crontab -
+}
+
+slowudp_manage_accounts() {
+    if ! command -v jq >/dev/null 2>&1; then
+        clear; show_banner
+        echo -e "${C_BOLD}${C_PURPLE}--- 🐌 SlowUDP (Hysteria) Account Management ---${C_RESET}"
+        echo -e "${C_RED}❌ jq not installed${C_RESET}"
+        return
+    fi
+
+    if [ ! -f "$SLOWUDP_CONFIG_FILE" ]; then
+        clear; show_banner
+        echo -e "${C_BOLD}${C_PURPLE}--- 🐌 SlowUDP (Hysteria) Account Management ---${C_RESET}"
+        echo -e "${C_RED}❌ SlowUDP is not installed. Install it first from Protocol Manager.${C_RESET}"
+        return
+    fi
+
+    _slowudp_meta_init
+    if ! crontab -l 2>/dev/null | grep -q "$SLOWUDP_CLEANUP_CRON_MARKER"; then
+        _slowudp_install_cleanup_cron
+    fi
+
+    # Stays in this manager - redrawing the (refreshed) account list after every action -
+    # until the user explicitly picks 0, same pattern as the ZiVPN manager.
+    while true; do
+        clear
+        show_banner
+
+        echo -e "${C_BOLD}${C_PURPLE}--- 🐌 SlowUDP (Hysteria) Account Management ---${C_RESET}"
+        echo -e "${C_DIM}Port: ${SLOWUDP_LISTEN_PORT} direct, ${SLOWUDP_RANGE_START}-${SLOWUDP_RANGE_END} forwarded. SNI: ${SLOWUDP_DEFAULT_SNI}${C_RESET}"
+        echo -e "${C_DIM}⚠️ Data quota is record-keeping only for SlowUDP (not actively enforced) - only expiration is.${C_RESET}"
+
+        slowudp_cleanup_expired_passwords
+
+        mapfile -t passwords < <(jq -r '.auth.config[]' "$SLOWUDP_CONFIG_FILE")
+
+        echo -e "\n${C_CYAN}Current accounts:${C_RESET}"
+
+        if [ ${#passwords[@]} -gt 0 ]; then
+            for i in "${!passwords[@]}"; do
+                local p_expires p_quota
+                p_expires=$(_slowudp_meta_get "${passwords[$i]}" "expires" "never")
+                p_quota=$(_slowudp_meta_get "${passwords[$i]}" "quota_gb" "unlimited")
+                [[ "$p_quota" != "unlimited" ]] && p_quota="${p_quota} GB"
+                echo -e "  ${C_GREEN}[$((i+1))]${C_RESET} ${C_YELLOW}${passwords[$i]}${C_RESET} ${C_DIM}(expires: ${C_RESET}${p_expires}${C_DIM}, quota: ${C_RESET}${p_quota}${C_DIM})${C_RESET}"
+            done
+        else
+            echo -e "  ${C_DIM}No accounts${C_RESET}"
+        fi
+
+        echo -e "\n${C_BOLD}Options:${C_RESET}"
+        echo -e "  ${C_GREEN}[1] Add${C_RESET}"
+        echo -e "  ${C_GREEN}[2] Remove${C_RESET}"
+        echo -e "  ${C_GREEN}[3] Modify (change password value)${C_RESET}"
+        echo -e "  ${C_GREEN}[4] Restart${C_RESET}"
+        echo -e "  ${C_GREEN}[5] Edit expiration date / data quota${C_RESET}"
+        echo -e "  ${C_RED}[0] Back${C_RESET}"
+
+        read -r -p "👉 Choice: " choice
+
+        case "$choice" in
+
+            1)
+                read -r -p "👉 New password: " new_pwd
+                if [ -z "$new_pwd" ]; then
+                    echo "❌ Empty"; sleep 1; continue
+                fi
+
+                jq --arg pwd "$new_pwd" \
+                '.auth.config += [$pwd]' \
+                "$SLOWUDP_CONFIG_FILE" > /tmp/slowudp.json && mv /tmp/slowudp.json "$SLOWUDP_CONFIG_FILE"
+
+                _slowudp_prompt_expiry_quota "never" "unlimited"
+                _slowudp_meta_set "$new_pwd" "$_SU_EXPIRES" "$_SU_QUOTA"
+
+                systemctl restart slowudp-server.service
+                echo "✅ Added (expires: $_SU_EXPIRES, quota: $_SU_QUOTA)"
+                ;;
+
+            2)
+                read -r -p "👉 Number: " num
+
+                if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt ${#passwords[@]} ]; then
+                    echo "❌ Invalid"; sleep 1; continue
+                fi
+
+                idx=$((num-1))
+                old_pwd="${passwords[$idx]}"
+
+                jq --argjson i "$idx" \
+                'del(.auth.config[$i])' \
+                "$SLOWUDP_CONFIG_FILE" > /tmp/slowudp.json && mv /tmp/slowudp.json "$SLOWUDP_CONFIG_FILE"
+                _slowudp_meta_delete "$old_pwd"
+
+                systemctl restart slowudp-server.service
+                echo "✅ Removed"
+                ;;
+
+            3)
+                read -r -p "👉 Number: " num
+                read -r -p "👉 New password: " new_pwd
+
+                if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt ${#passwords[@]} ]; then
+                    echo "❌ Invalid"; sleep 1; continue
+                fi
+
+                if [ -z "$new_pwd" ]; then
+                    echo "❌ Empty"; sleep 1; continue
+                fi
+
+                idx=$((num-1))
+                old_pwd="${passwords[$idx]}"
+
+                jq --argjson i "$idx" --arg new "$new_pwd" \
+                '.auth.config[$i] = $new' \
+                "$SLOWUDP_CONFIG_FILE" > /tmp/slowudp.json && mv /tmp/slowudp.json "$SLOWUDP_CONFIG_FILE"
+                _slowudp_meta_rename "$old_pwd" "$new_pwd"
+
+                systemctl restart slowudp-server.service
+                echo "✅ Modified"
+                ;;
+
+            4)
+                systemctl restart slowudp-server.service
+                echo "✅ Restarted"
+                ;;
+
+            5)
+                read -r -p "👉 Number: " num
+
+                if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt ${#passwords[@]} ]; then
+                    echo "❌ Invalid"; sleep 1; continue
+                fi
+
+                idx=$((num-1))
+                target_pwd="${passwords[$idx]}"
+                cur_expires=$(_slowudp_meta_get "$target_pwd" "expires" "never")
+                cur_quota=$(_slowudp_meta_get "$target_pwd" "quota_gb" "unlimited")
+
+                echo -e "${C_DIM}Editing '${target_pwd}' — current expires: ${cur_expires}, current quota: ${cur_quota}${C_RESET}"
+                _slowudp_prompt_expiry_quota "$cur_expires" "$cur_quota"
+                _slowudp_meta_set "$target_pwd" "$_SU_EXPIRES" "$_SU_QUOTA"
+                echo "✅ Updated (expires: $_SU_EXPIRES, quota: $_SU_QUOTA)"
+                ;;
+
+            0) return ;;
+            *) invalid_option; continue ;;
+        esac
+
+        read -r -p $'\nPress Enter to continue...' _
+    done
 }
 
 _zivpn_meta_init() {
@@ -4174,6 +5086,7 @@ refresh_banner_cache() {
     BANNER_CACHE_TS=$now
 }
 
+
 show_banner() {
     refresh_banner_cache
     [[ -t 1 ]] && clear
@@ -4221,6 +5134,7 @@ protocol_menu() {
         local badvpn_status; if systemctl is-active --quiet badvpn; then badvpn_status="${C_STATUS_A}(Active)${C_RESET}"; else badvpn_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
         local udp_custom_status; if systemctl is-active --quiet udp-custom; then udp_custom_status="${C_STATUS_A}(Active)${C_RESET}"; else udp_custom_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
         local zivpn_status; if systemctl is-active --quiet zivpn.service; then zivpn_status="${C_STATUS_A}(Active)${C_RESET}"; else zivpn_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
+        local slowudp_status; if systemctl is-active --quiet slowudp-server.service; then slowudp_status="${C_STATUS_A}(Active)${C_RESET}"; else slowudp_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
         
         local ssl_tunnel_text="HAProxy Edge Stack (80/443)"
         local ssl_tunnel_status="${C_STATUS_I}(Inactive)${C_RESET}"
@@ -4242,13 +5156,15 @@ protocol_menu() {
         printf "  ${C_CHOICE}[ 6]${C_RESET} %-45s\n" "🗑️ Uninstall HAProxy Edge Stack"
         printf "  ${C_CHOICE}[ 7]${C_RESET} %-45s %s\n" "🛡️ Install ZiVPN (UDP 5667)" "$zivpn_status"
         printf "  ${C_CHOICE}[ 8]${C_RESET} %-45s\n" "🗑️ Uninstall ZiVPN"
-        printf "  ${C_CHOICE}[ 9]${C_RESET} %-45s %s\n" "🌐 Install/Manage Internal Nginx (8880/8443)" "$nginx_status"
-        printf "  ${C_CHOICE}[10]${C_RESET} %-45s %s\n" "🐍 Install PY SOCKS/WS Proxy (legacy)" "$pyproxy_status"
-        printf "  ${C_CHOICE}[11]${C_RESET} %-45s\n" "🗑️ Uninstall PY SOCKS/WS Proxy"
+        printf "  ${C_CHOICE}[ 9]${C_RESET} %-45s %s\n" "🐌 Install SlowUDP (Hysteria)" "$slowudp_status"
+        printf "  ${C_CHOICE}[10]${C_RESET} %-45s\n" "🗑️ Uninstall SlowUDP"
+        printf "  ${C_CHOICE}[11]${C_RESET} %-45s %s\n" "🌐 Install/Manage Internal Nginx (8880/8443)" "$nginx_status"
+        printf "  ${C_CHOICE}[12]${C_RESET} %-45s %s\n" "🐍 Install PY SOCKS/WS Proxy (legacy)" "$pyproxy_status"
+        printf "  ${C_CHOICE}[13]${C_RESET} %-45s\n" "🗑️ Uninstall PY SOCKS/WS Proxy"
 
         echo -e "  ${C_ACCENT}--- 💻 MANAGEMENT PANELS ---${C_RESET}"
-        printf "  ${C_CHOICE}[12]${C_RESET} %-45s %s\n" "💻 Install X-UI Panel" "$xui_status"
-        printf "  ${C_CHOICE}[13]${C_RESET} %-45s\n" "🗑️ Uninstall X-UI Panel"
+        printf "  ${C_CHOICE}[14]${C_RESET} %-45s %s\n" "💻 Install X-UI Panel" "$xui_status"
+        printf "  ${C_CHOICE}[15]${C_RESET} %-45s\n" "🗑️ Uninstall X-UI Panel"
 
         echo -e " ${C_DIM}══════════════════════════════════════════════════════${C_RESET}"
         echo -e "   ${C_WARN}[ 0]${C_RESET} ↩️ Return to Main Menu"
@@ -4262,9 +5178,10 @@ protocol_menu() {
             3) install_udp_custom; press_enter ;; 4) uninstall_udp_custom; press_enter ;;
             5) install_ssl_tunnel; press_enter ;; 6) uninstall_ssl_tunnel; press_enter ;;
             7) install_zivpn; press_enter ;; 8) uninstall_zivpn; press_enter ;;
-            9) nginx_proxy_menu ;;
-            10) install_pyproxy; press_enter ;; 11) uninstall_pyproxy; press_enter ;;
-            12) install_xui_panel; press_enter ;; 13) uninstall_xui_panel; press_enter ;;
+            9) install_slowudp; press_enter ;; 10) uninstall_slowudp; press_enter ;;
+            11) nginx_proxy_menu ;;
+            12) install_pyproxy; press_enter ;; 13) uninstall_pyproxy; press_enter ;;
+            14) install_xui_panel; press_enter ;; 15) uninstall_xui_panel; press_enter ;;
             0) return ;;
             *) invalid_option ;;
         esac
@@ -4610,20 +5527,19 @@ generate_client_config() {
 
     echo -e "\n${C_BOLD}${C_PURPLE}--- 📱 Client Connection Configuration ---${C_RESET}"
     echo -e "${C_CYAN}Copy the details below to your clipboard:${C_RESET}\n"
-    echo -e "╔════════════════════════════╗"
-    echo -e "    🌐  𝗡𝗢𝗩𝗔 𝗫𝗧𝗨𝗡𝗡𝗘𝗟  🌐"
-    echo -e "╚════════════════════════════╝"
-    echo -e "${C_YELLOW}═══════════════════════════════${C_RESET}"
+
+    echo -e "${C_YELLOW}========================================${C_RESET}"
     echo -e "👤 ${C_BOLD}User Details${C_RESET}"
     echo -e "   • Username: ${C_WHITE}$user${C_RESET}"
     echo -e "   • Password: ${C_WHITE}$pass${C_RESET}"
     echo -e "   • Host/IP : ${C_WHITE}$host_domain${C_RESET}"
-    echo -e "${C_YELLOW}═══════════════════════════════${C_RESET}"
+    echo -e "${C_YELLOW}========================================${C_RESET}"
     
     # 1. SSH Direct
     echo -e "\n🔹 ${C_BOLD}SSH Direct${C_RESET}:"
     echo -e "   • Host: $host_domain"
     echo -e "   • Port: 22"
+    echo -e "   • payload: 8080,8888,444(Standard SSH)"
 
     # 2. HAProxy edge stack
     if systemctl is-active --quiet haproxy; then
@@ -4631,6 +5547,7 @@ generate_client_config() {
         echo -e "   • Host: $host_domain"
         echo -e "   • Port 80: HTTP payloads / raw SSH"
         echo -e "   • Port 443: TLS / SNI / SSL payloads"
+        echo -e "   • Internal handoff: Nginx ${NGINX_INTERNAL_HTTP_PORT}/${NGINX_INTERNAL_TLS_PORT}"
         echo -e "   • SNI (BugHost): $host_domain (or your preferred SNI)"
     elif systemctl is-active --quiet nginx; then
         echo -e "\n🔹 ${C_BOLD}Internal Nginx Proxy${C_RESET}:"
@@ -4661,7 +5578,7 @@ generate_client_config() {
         systemctl is-active --quiet pyproxy-ws && echo -e "   • WebSocket Port: ${WS_PORT} (HTTP 101)"
     fi
     
-    echo -e "${C_YELLOW}═══════════════════════════════${C_RESET}"
+    echo -e "${C_YELLOW}========================================${C_RESET}"
     press_enter
 }
 
@@ -5007,13 +5924,14 @@ main_menu() {
         echo
         echo -e "${C_TITLE}═══════════════════[ ${C_BOLD}🌐 VPN & PROTOCOLS ${C_RESET}${C_TITLE}]═══════════════════${C_RESET}"
         printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "13" "$(_pad_visual "🔌 Protocol Manager" 28)" "14" "$(_pad_visual "📈 Traffic Monitor (Lite)" 28)"
-        printf "  ${C_CHOICE}[%2s]${C_RESET} %-28s\n" "15" "🚫 Block Torrent (Anti-P2P)"
+        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "15" "$(_pad_visual "🐌 SlowUDP Hysteria Manager" 28)" "16" "$(_pad_visual "🚫 Block Torrent (Anti-P2P)" 28)"
 
         echo
         echo -e "${C_TITLE}═══════════════════[ ${C_BOLD}⚙️ SYSTEM SETTINGS ${C_RESET}${C_TITLE}]═══════════════════${C_RESET}"
-        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "16" "$(_pad_visual "☁️ CloudFlare Free Domain" 28)" "17" "$(_pad_visual "🎨 SSH Banner Config" 28)"
-        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "18" "$(_pad_visual "🔄 Auto-Reboot Task" 28)" "19" "$(_pad_visual "💾 Backup User Data" 28)"
-        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "20" "$(_pad_visual "📥 Restore User Data" 28)" "21" "$(_pad_visual "🧹 Cleanup Expired Users" 28)"
+        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "17" "$(_pad_visual "☁️ CloudFlare Free Domain" 28)" "18" "$(_pad_visual "🎨 SSH Banner Config" 28)"
+        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "19" "$(_pad_visual "🔄 Auto-Reboot Task" 28)" "20" "$(_pad_visual "💾 Backup User Data" 28)"
+        printf "  ${C_CHOICE}[%2s]${C_RESET} %s ${C_CHOICE}[%2s]${C_RESET} %s\n" "21" "$(_pad_visual "📥 Restore User Data" 28)" "22" "$(_pad_visual "🧹 Cleanup Expired Users" 28)"
+        printf "  ${C_CHOICE}[%2s]${C_RESET} %s\n" "23" "$(_pad_visual "🌍 Domains & Certificates" 28)"
 
         echo
         echo -e "${C_DANGER}═══════════════════[ ${C_BOLD}🔥 DANGER ZONE ${C_RESET}${C_DANGER}]═══════════════════${C_RESET}"
@@ -5039,14 +5957,16 @@ main_menu() {
 
             13) protocol_menu ;;
             14) traffic_monitor_menu ;;
-            15) torrent_block_menu ;;
+            15) slowudp_manage_accounts ;;
+            16) torrent_block_menu ;;
             
-            16) dns_menu; press_enter ;;
-            17) ssh_banner_menu ;;
-            18) auto_reboot_menu ;;
-            19) backup_user_data; press_enter ;;
-            20) restore_user_data; press_enter ;;
-            21) cleanup_expired; press_enter ;;
+            17) dns_menu; press_enter ;;
+            18) ssh_banner_menu ;;
+            19) auto_reboot_menu ;;
+            20) backup_user_data; press_enter ;;
+            21) restore_user_data; press_enter ;;
+            22) cleanup_expired; press_enter ;;
+            23) edge_domains_menu ;;
             
             99) uninstall_script ;;
             0) exit 0 ;;
@@ -5069,6 +5989,7 @@ if [[ "$1" == "--exec" ]]; then
         install_udp_custom|uninstall_udp_custom|\
         install_ssl_tunnel|uninstall_ssl_tunnel|\
         install_zivpn|uninstall_zivpn|\
+        install_slowudp|uninstall_slowudp|\
         torrent_block_enable|torrent_block_disable)
             "$action" </dev/null
             exit $?

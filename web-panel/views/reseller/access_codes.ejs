@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('../partials/head', { title: 'Codes d\'Accès Premium - NovaXTunnel' }) %>
+  <style>
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 12px; padding: 18px; }
+    .stat-title { font-size: 13px; color: var(--text-muted, #9090A0); margin-bottom: 6px; }
+    .stat-value { font-size: 22px; font-weight: 700; color: var(--text, #FFF); }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-success { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
+    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+    .badge-warning { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+    .code-box { font-family: monospace; font-size: 14px; font-weight: 700; background: rgba(124, 92, 255, 0.1); color: #A78BFA; padding: 4px 8px; border-radius: 6px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/sidebar') %>
+
+  <div class="main-content">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px;">
+      <div>
+        <h1 style="font-size:24px; font-weight:800; margin:0;">Codes d'Accès Premium</h1>
+        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:14px;">Générez des clés d'accès chiffrées avec quotas de data, HWID et références clients.</p>
+      </div>
+      <button class="btn-primary" onclick="document.getElementById('modalCreateCode').style.display='flex'">
+        + Générer Code Premium
+      </button>
+    </div>
+
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#EF4444; padding:12px; border-radius:8px; margin-bottom:20px;">
+        <%= error %>
+      </div>
+    <% } %>
+
+    <% if (typeof success !== 'undefined' && success) { %>
+      <div style="background:rgba(34,197,94,0.15); border:1px solid #22C55E; color:#22C55E; padding:12px; border-radius:8px; margin-bottom:20px;">
+        <%= success %>
+      </div>
+    <% } %>
+
+    <div class="card-grid">
+      <div class="stat-card">
+        <div class="stat-title">Codes Générés</div>
+        <div class="stat-value"><%= accessCodes.length %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Codes Actifs</div>
+        <div class="stat-value" style="color:#22C55E;"><%= accessCodes.filter(c => c.status === 'active').length %></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Consommation Totale Data</div>
+        <div class="stat-value" style="color:#22D3EE;">
+          <%= accessCodes.reduce((acc, c) => acc + (c.consumed_data_gb || 0), 0).toFixed(2) %> Go
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card" style="margin-bottom:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <h3 style="margin:0; font-size:16px;">Liste de vos Codes Premium</h3>
+        <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="🔍 Rechercher par code, nom ou téléphone..." style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:280px; font-size:13px;" />
+      </div>
+
+      <% if (accessCodes.length === 0) { %>
+        <p style="color:var(--text-muted); font-size:14px; margin:0;">Aucun code d'accès généré pour l'instant.</p>
+      <% } else { %>
+        <div style="overflow-x:auto;">
+          <table id="codesTable" style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
+                <th style="padding:10px;">Référence / Client</th>
+                <th style="padding:10px;">Code Premium</th>
+                <th style="padding:10px;">Consommation Data</th>
+                <th style="padding:10px;">HWID Lié</th>
+                <th style="padding:10px;">Expiration</th>
+                <th style="padding:10px;">Statut</th>
+                <th style="padding:10px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% accessCodes.forEach(c => { %>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <td style="padding:12px 10px; font-weight:600;">
+                    <%= c.client_reference ? c.client_reference : 'Sans nom' %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <span class="code-box"><%= c.code %></span>
+                    <button class="btn-ghost small" onclick="navigator.clipboard.writeText('<%= c.code %>'); alert('Code copié : <%= c.code %>');" style="padding:2px 6px; margin-left:4px;">📋</button>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <strong><%= c.consumed_data_gb.toFixed(2) %> Go</strong> / <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %>
+                  </td>
+                  <td style="padding:12px 10px; font-family:monospace; color:var(--text-muted);">
+                    <%= c.allowed_hwids ? c.allowed_hwids : 'Auto-liaison au 1er clic' %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <%= c.expiry_date ? c.expiry_date : 'Illimité' %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <% if (c.status === 'active') { %>
+                      <span class="badge badge-success">Actif</span>
+                    <% } else if (c.status === 'expired') { %>
+                      <span class="badge badge-warning">Expiré</span>
+                    <% } else { %>
+                      <span class="badge badge-danger"><%= c.status %></span>
+                    <% } %>
+                  </td>
+                  <td style="padding:12px 10px;">
+                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code d\'accès ?');">
+                      <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Modal Création Code Premium -->
+  <div id="modalCreateCode" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
+    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:500px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+        <h3 style="margin:0; font-size:18px;">Générer un Code d'Accès Premium</h3>
+        <button onclick="document.getElementById('modalCreateCode').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+      </div>
+
+      <form method="POST" action="/reseller/access-codes">
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">N° Téléphone / Nom du Client</label>
+          <input type="text" name="clientReference" placeholder="ex: +225 07080910 ou Jean Dupont" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Limite de Data (Go)</label>
+          <input type="number" step="0.5" name="maxDataGb" value="10" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Durée de Validité (Jours)</label>
+          <input type="number" name="expiryDays" value="30" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">HWID / Device ID du Client (Facultatif)</label>
+          <input type="text" name="hwid" placeholder="Ex: A1B2C3D4E5F6 (Vide = auto-liaison lors de la saisie)" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        </div>
+
+        <% if (extraTemplates && extraTemplates.length > 0) { %>
+          <div style="margin-bottom:16px;">
+            <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:8px;">Serveurs Premium Complémentaires</label>
+            <div style="max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px;">
+              <% extraTemplates.forEach(t => { %>
+                <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; cursor:pointer;">
+                  <input type="checkbox" name="selectedTemplateIds" value="<%= t.id %>" checked />
+                  <span><%= t.name %> (<%= t.protocol.toUpperCase() %>)</span>
+                </label>
+              <% }); %>
+            </div>
+          </div>
+        <% } %>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+          <button type="button" class="btn-ghost" onclick="document.getElementById('modalCreateCode').style.display='none'">Annuler</button>
+          <button type="submit" class="btn-primary">Générer Code</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function filterTable() {
+      var input = document.getElementById('searchInput');
+      var filter = input.value.toLowerCase();
+      var table = document.getElementById('codesTable');
+      var tr = table.getElementsByTagName('tr');
+
+      for (var i = 1; i < tr.length; i++) {
+        var text = tr[i].textContent || tr[i].innerText;
+        if (text.toLowerCase().indexOf(filter) > -1) {
+          tr[i].style.display = '';
+        } else {
+          tr[i].style.display = 'none';
+        }
+      }
+    }
+  </script>
+</body>
+</html>
