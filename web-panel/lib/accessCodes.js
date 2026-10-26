@@ -213,7 +213,6 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
       message: activeNotif.message,
       url: activeNotif.url || ''
     } : null,
-    } : null,
     UserInfo: {
       AccessCode: accessCode.code,
       ClientReference: accessCode.client_reference || '',
