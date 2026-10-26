@@ -3108,9 +3108,20 @@ write_internal_nginx_config() {
     [[ -z "$server_name" ]] && server_name="_"
     mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
 
+    local panel_port="3000"
+    if [ -f "/opt/nova-x-tunnel/web-panel/.env" ]; then
+        local p
+        p=$(grep -E '^PORT=' /opt/nova-x-tunnel/web-panel/.env | cut -d'=' -f2 | tr -d ' "\'\r')
+        [ -n "$p" ] && panel_port="$p"
+    elif [ -f "/opt/novaxtunnel/web-panel/.env" ]; then
+        local p
+        p=$(grep -E '^PORT=' /opt/novaxtunnel/web-panel/.env | cut -d'=' -f2 | tr -d ' "\'\r')
+        [ -n "$p" ] && panel_port="$p"
+    fi
+
     # The proxy locations are identical for every domain, so they live in one shared snippet
-    # included by each server block (quoted heredoc: the nginx $variables stay literal).
-    cat > "$NGINX_LOCATIONS_SNIPPET" <<'EOF'
+    # included by each server block.
+    cat > "$NGINX_LOCATIONS_SNIPPET" <<EOF
     location ~ ^/(?<fwdport>\d+)/(?<fwdpath>.*)$ {
         client_max_body_size 0;
         client_body_timeout 1d;
@@ -3121,24 +3132,24 @@ write_internal_nginx_config() {
         proxy_buffering off;
         proxy_request_buffering off;
         proxy_socket_keepalive on;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        if ($content_type ~* "GRPC") { grpc_pass grpc://127.0.0.1:$fwdport$is_args$args; break; }
-        proxy_pass http://127.0.0.1:$fwdport$is_args$args;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        if (\$content_type ~* "GRPC") { grpc_pass grpc://127.0.0.1:\$fwdport\$is_args\$args; break; }
+        proxy_pass http://127.0.0.1:\$fwdport\$is_args\$args;
         break;
     }
 
     location /api/ {
         proxy_read_timeout 300s;
         proxy_http_version 1.1;
-        proxy_pass http://127.0.0.1:2045;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://127.0.0.1:${panel_port};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
     location / {
