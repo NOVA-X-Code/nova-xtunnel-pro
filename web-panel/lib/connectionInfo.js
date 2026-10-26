@@ -107,11 +107,13 @@ function buildConnectionInfo(client) {
 
     if (protocols.includes('slowdns') && serviceActive('dnstt')) {
       const dnstt = readShellVars(config.DNSTT_CONFIG_FILE);
+      const modeStr = dnstt.FORWARD_DESC ? ` (${dnstt.FORWARD_DESC})` : '';
       sections.push({
-        title: 'SSH SlowDNS (DNSTT)',
+        title: `SlowDNS (DNSTT${modeStr})`,
         lines: [
           `Nameserver: ${dnstt.TUNNEL_DOMAIN || '(non configuré)'}`,
           `PubKey: ${dnstt.PUBLIC_KEY || '(non configuré)'}`,
+          `Mode: ${dnstt.FORWARD_DESC || 'SSH only'}`,
           'DNS IP: 1.1.1.1 / 8.8.8.8'
         ]
       });

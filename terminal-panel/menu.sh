@@ -112,6 +112,15 @@ SLOWUDP_LISTEN_PORT="38211"
 SLOWUDP_RANGE_START="20000"
 SLOWUDP_RANGE_END="29999"
 
+# --- SlowDNS / DNSTT Variables ---
+DNSTT_DIR="/etc/novaxtunnel"
+DNSTT_INFO_FILE="$DNSTT_DIR/dnstt_info.conf"
+DNSTT_KEY_FILE="$DNSTT_DIR/dnstt.key"
+DNSTT_PUB_FILE="$DNSTT_DIR/dnstt.pub"
+DNSTT_BIN="/usr/local/bin/dnstt-server"
+DNSTT_SERVICE_FILE="/etc/systemd/system/dnstt.service"
+DNSTT_LISTEN_PORT="5300"
+
 DESEC_TOKEN="V55cFY8zTictLCPfviiuX5DHjs15"
 DESEC_DOMAIN="manager.firewallfalcon.qzz.io"
 
@@ -597,6 +606,11 @@ _ff_rebuild_udp_dnat_rules() {
 
     if [ -f "$SLOWUDP_SERVICE_FILE" ]; then
         all_segments+=("$SLOWUDP_RANGE_START $SLOWUDP_RANGE_END $SLOWUDP_LISTEN_PORT")
+    fi
+
+    if [ -f "$DNSTT_SERVICE_FILE" ]; then
+        iptables -t nat -D PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
+        iptables -t nat -A PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT"
     fi
 
     (( ${#all_segments[@]} == 0 )) && return
@@ -3953,23 +3967,31 @@ install_slowudp() {
     clear; show_banner
     echo -e "${C_BOLD}${C_PURPLE}--- 🚀 Installing SlowUDP (Hysteria) ---${C_RESET}"
 
-    if [ -f "$SLOWUDP_SERVICE_FILE" ]; then
-        echo -e "\n${C_YELLOW}ℹ️ SlowUDP is already installed.${C_RESET}"
+    if [ -f "$SLOWUDP_SERVICE_FILE" ] && systemctl is-active --quiet slowudp-server.service; then
+        echo -e "\n${C_YELLOW}ℹ️ SlowUDP is already installed and active.${C_RESET}"
         return
     fi
 
-    # The official installer handles GitHub release resolution, OS/arch detection, the
-    # slowudp binary, the systemd service files, and a dedicated system user - all fully
-    # non-interactively when run with no arguments. We overwrite its example config
-    # ourselves right after with a multi-password-ready one (see below).
-    echo -e "\n${C_GREEN}📦 Downloading and running the official SlowUDP installer...${C_RESET}"
-    if ! bash <(curl -fsSL "$SLOWUDP_INSTALL_SCRIPT_URL"); then
-        echo -e "${C_RED}❌ SlowUDP installation failed. Check your internet connection.${C_RESET}"
-        return
+    check_and_free_ports "$SLOWUDP_LISTEN_PORT" || return
+
+    echo -e "\n${C_GREEN}📦 Downloading SlowUDP installer / binary...${C_RESET}"
+    bash <(curl -fsSL "$SLOWUDP_INSTALL_SCRIPT_URL") 2>/dev/null || true
+
+    if [ ! -f "$SLOWUDP_BIN" ]; then
+        echo -e "${C_YELLOW}⚠️ Downloading SlowUDP binary directly...${C_RESET}"
+        local arch=$(uname -m)
+        local slowudp_url="https://github.com/evozi/hysteria-install/raw/main/slowudp/slowudp-linux-amd64"
+        if [[ "$arch" == "aarch64" || "$arch" == "arm64" ]]; then
+            slowudp_url="https://github.com/evozi/hysteria-install/raw/main/slowudp/slowudp-linux-arm64"
+        elif [[ "$arch" == "armv7l" || "$arch" == "arm" ]]; then
+            slowudp_url="https://github.com/evozi/hysteria-install/raw/main/slowudp/slowudp-linux-arm"
+        fi
+        wget -q --show-progress -O "$SLOWUDP_BIN" "$slowudp_url" || true
+        chmod +x "$SLOWUDP_BIN" 2>/dev/null
     fi
 
     if [ ! -f "$SLOWUDP_BIN" ]; then
-        echo -e "${C_RED}❌ SlowUDP binary not found after installation.${C_RESET}"
+        echo -e "${C_RED}❌ SlowUDP binary not found. Check your internet connection.${C_RESET}"
         return
     fi
 
@@ -3986,30 +4008,47 @@ install_slowudp() {
         -subj "/CN=${SLOWUDP_DEFAULT_SNI}" 2>/dev/null
     chmod 600 "$SLOWUDP_KEY_FILE"
 
-    echo -e "${C_BLUE}⚙️ Writing multi-account configuration...${C_RESET}"
-    # "passwords" auth mode accepts an array of valid passwords - this is what lets us
-    # manage several independent SlowUDP accounts on the same server/port, the same way
-    # ZiVPN's password list works. Starts empty; accounts are added via the manager below.
+    echo -e "${C_BLUE}⚙️ Writing configuration and service files...${C_RESET}"
     cat <<EOF > "$SLOWUDP_CONFIG_FILE"
 {
-  "protocol": "udp",
   "listen": ":${SLOWUDP_LISTEN_PORT}",
-  "resolve_preference": "46",
   "cert": "$SLOWUDP_CERT_FILE",
   "key": "$SLOWUDP_KEY_FILE",
   "alpn": "h3",
-  "obfs": "",
   "auth": {
     "mode": "passwords",
-    "config": []
+    "config": ["slowudp"]
   }
 }
+EOF
+
+    _slowudp_meta_set "slowudp" "never" "unlimited"
+
+    cat <<EOF > "$SLOWUDP_SERVICE_FILE"
+[Unit]
+Description=SlowUDP Hysteria Server by NOVA XTUNNEL
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$SLOWUDP_DIR
+ExecStart=$SLOWUDP_BIN server -c $SLOWUDP_CONFIG_FILE
+Restart=always
+RestartSec=3
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
     echo -e "\n${C_GREEN}🚀 Starting SlowUDP Service...${C_RESET}"
     systemctl daemon-reload
     systemctl enable slowudp-server.service >/dev/null 2>&1
     systemctl restart slowudp-server.service
+    sleep 2
 
     echo -e "${C_BLUE}🔥 Configuring Firewall Rules (Redirecting ${SLOWUDP_RANGE_START}-${SLOWUDP_RANGE_END} -> ${SLOWUDP_LISTEN_PORT})...${C_RESET}"
     _ff_rebuild_udp_dnat_rules
@@ -4022,9 +4061,11 @@ EOF
         echo -e "   - UDP Port: ${SLOWUDP_LISTEN_PORT} (Direct)"
         echo -e "   - UDP Ports: ${SLOWUDP_RANGE_START}-${SLOWUDP_RANGE_END} (Forwarded)"
         echo -e "   - SNI: ${SLOWUDP_DEFAULT_SNI} (self-signed cert)"
-        echo -e "${C_DIM}   Use 'SlowUDP Hysteria Manager' from the VPN & Protocols menu to create accounts.${C_RESET}"
+        echo -e "   - Default Password: ${C_YELLOW}slowudp${C_RESET}"
+        echo -e "${C_DIM}   Use 'SlowUDP Hysteria Manager' from the main menu to manage passwords.${C_RESET}"
     else
-        echo -e "\n${C_RED}❌ SlowUDP Service failed to start. Check logs: journalctl -u slowudp-server.service${C_RESET}"
+        echo -e "\n${C_RED}❌ SlowUDP Service failed to start. Diagnostics (journalctl -u slowudp-server.service):${C_RESET}"
+        journalctl -u slowudp-server.service -n 15 --no-pager
     fi
 }
 
@@ -4054,6 +4095,291 @@ uninstall_slowudp() {
     systemctl daemon-reload
 
     echo -e "${C_BLUE}🔥 Removing firewall redirect rules (reclaiming range for udp-custom if installed)...${C_RESET}"
+    _ff_rebuild_udp_dnat_rules
+
+    echo -e "\n${C_GREEN}✅ SlowUDP Uninstalled Successfully.${C_RESET}"
+}
+
+configure_dnstt_mux() {
+    local MUX_PORT="10022"
+    local MUX_CONFIG="/etc/haproxy/haproxy-dnstt-mux.cfg"
+    local MUX_SERVICE_FILE="/etc/systemd/system/dnstt-mux.service"
+
+    echo -e "\n${C_BLUE}🔄 Configuring SSH + V2Ray multiplexer...${C_RESET}"
+
+    if ss -lnt 2>/dev/null | grep -qE '(^|:)22[[:space:]]'; then
+        echo -e "${C_GREEN}✅ SSH detected on port 22.${C_RESET}"
+    else
+        echo -e "${C_YELLOW}⚠️ SSH does not appear to listen on port 22.${C_RESET}"
+    fi
+
+    if ss -lnt 2>/dev/null | grep -qE '(^|:)8787[[:space:]]'; then
+        echo -e "${C_GREEN}✅ V2Ray detected on port 8787.${C_RESET}"
+    else
+        echo -e "${C_YELLOW}⚠️ V2Ray does not appear to listen on port 8787.${C_RESET}"
+        echo -e "${C_DIM}   Make sure your V2Ray/Xray inbound uses 127.0.0.1:8787.${C_RESET}"
+    fi
+
+    if ! command -v haproxy >/dev/null 2>&1; then
+        echo -e "${C_BLUE}📦 Installing HAProxy for the multiplexer...${C_RESET}"
+        ff_apt_install haproxy || {
+            echo -e "${C_RED}❌ Failed to install HAProxy.${C_RESET}"
+            return 1
+        }
+    fi
+
+    mkdir -p /etc/haproxy
+
+    cat > "$MUX_CONFIG" <<EOF
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    option dontlognull
+    timeout connect 5s
+    timeout client 24h
+    timeout server 24h
+
+frontend dnstt_mux
+    bind 127.0.0.1:${MUX_PORT}
+    mode tcp
+    tcp-request inspect-delay 2s
+
+    acl is_ssh payload(0,7) -m bin 5353482d322e30
+    tcp-request content accept if is_ssh
+
+    use_backend dnstt_ssh if is_ssh
+    default_backend dnstt_v2ray
+
+backend dnstt_ssh
+    mode tcp
+    server ssh_backend 127.0.0.1:22 check
+
+backend dnstt_v2ray
+    mode tcp
+    server v2ray_backend 127.0.0.1:8787 check
+EOF
+
+    echo -e "${C_BLUE}🧪 Validating multiplexer configuration...${C_RESET}"
+    if ! haproxy -c -f "$MUX_CONFIG" >/dev/null 2>&1; then
+        echo -e "${C_RED}❌ HAProxy multiplexer configuration is invalid.${C_RESET}"
+        return 1
+    fi
+
+    cat > "$MUX_SERVICE_FILE" <<EOF
+[Unit]
+Description=DNSTT SSH + V2Ray Multiplexer
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/haproxy -f ${MUX_CONFIG} -db
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable dnstt-mux.service >/dev/null 2>&1
+    systemctl restart dnstt-mux.service
+    sleep 2
+
+    if ! systemctl is-active --quiet dnstt-mux.service; then
+        echo -e "${C_RED}❌ DNSTT multiplexer failed to start.${C_RESET}"
+        journalctl -u dnstt-mux.service -n 15 --no-pager
+        return 1
+    fi
+
+    echo -e "${C_GREEN}✅ SSH + V2Ray multiplexer is active.${C_RESET}"
+    echo -e "   - DNSTT -> 127.0.0.1:${MUX_PORT}"
+    echo -e "   - SSH   -> 127.0.0.1:22"
+    echo -e "   - V2Ray -> 127.0.0.1:8787"
+    return 0
+}
+
+install_slowdns() {
+    clear; show_banner
+    echo -e "${C_BOLD}${C_PURPLE}--- 🐌 Installing SlowDNS (DNSTT Port 53) ---${C_RESET}"
+
+    if [ -f "$DNSTT_SERVICE_FILE" ] && systemctl is-active --quiet dnstt; then
+        echo -e "\n${C_YELLOW}ℹ️ SlowDNS (DNSTT) is already installed and active.${C_RESET}"
+        return
+    fi
+
+    echo -e "\n${C_GREEN}⚙️ Checking system architecture...${C_RESET}"
+    local arch=$(uname -m)
+    local dnstt_url=""
+
+    if [[ "$arch" == "x86_64" ]]; then
+        dnstt_url="https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-amd64"
+        echo -e "${C_BLUE}ℹ️ Detected x86_64 (amd64) architecture.${C_RESET}"
+    elif [[ "$arch" == "aarch64" || "$arch" == "arm64" ]]; then
+        dnstt_url="https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-arm64"
+        echo -e "${C_BLUE}ℹ️ Detected ARM64 architecture.${C_RESET}"
+    elif [[ "$arch" == "armv7l" || "$arch" == "arm" ]]; then
+        dnstt_url="https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-arm"
+        echo -e "${C_BLUE}ℹ️ Detected ARM architecture.${C_RESET}"
+    else
+        echo -e "${C_RED}❌ Unsupported architecture: $arch${C_RESET}"
+        return
+    fi
+
+    echo -e "\n${C_GREEN}📥 Downloading dnstt-server binary...${C_RESET}"
+    if ! wget -q --show-progress -O "$DNSTT_BIN" "$dnstt_url"; then
+        local fallback_url="https://raw.githubusercontent.com/beethovenn/slowdns/main/dnstt-server-linux-amd64"
+        [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && fallback_url="https://raw.githubusercontent.com/beethovenn/slowdns/main/dnstt-server-linux-arm64"
+        echo -e "${C_YELLOW}⚠️ Retrying with fallback mirror...${C_RESET}"
+        if ! wget -q --show-progress -O "$DNSTT_BIN" "$fallback_url"; then
+            echo -e "${C_RED}❌ Download failed. Check your internet connection.${C_RESET}"
+            return
+        fi
+    fi
+    chmod +x "$DNSTT_BIN"
+
+    echo -e "\n${C_BLUE}Select the SlowDNS backend destination:${C_RESET}"
+    echo -e "  ${C_GREEN}[ 1]${C_RESET} SSH only (127.0.0.1:22)"
+    echo -e "  ${C_GREEN}[ 2]${C_RESET} V2Ray only (127.0.0.1:8787)"
+    echo -e "  ${C_GREEN}[ 3]${C_RESET} SSH + V2Ray (Multiplexed via HAProxy)"
+    echo
+    read -p "👉 Choose mode [1]: " backend_choice
+    backend_choice=${backend_choice:-1}
+
+    local target_addr="127.0.0.1:22"
+    local forward_desc="SSH only"
+
+    case "$backend_choice" in
+        1)
+            target_addr="127.0.0.1:22"
+            forward_desc="SSH only"
+            ;;
+        2)
+            target_addr="127.0.0.1:8787"
+            forward_desc="V2Ray only"
+            ;;
+        3)
+            target_addr="127.0.0.1:10022"
+            forward_desc="SSH + V2Ray"
+            configure_dnstt_mux || return 1
+            ;;
+        *)
+            target_addr="127.0.0.1:22"
+            forward_desc="SSH only"
+            ;;
+    esac
+
+    echo -e "\n${C_YELLOW}🌐 SlowDNS Nameserver Setup${C_RESET}"
+    read -p "👉 Enter your NS / Subdomain (e.g. ns.yourdomain.com): " ns_domain
+    if [[ -z "$ns_domain" ]]; then
+        echo -e "${C_RED}❌ Nameserver domain cannot be empty.${C_RESET}"
+        rm -f "$DNSTT_BIN"
+        return
+    fi
+
+    echo -e "\n${C_GREEN}🔐 Generating key pair for DNSTT...${C_RESET}"
+    mkdir -p "$DNSTT_DIR"
+    rm -f "$DNSTT_KEY_FILE" "$DNSTT_PUB_FILE"
+    "$DNSTT_BIN" -gen-key -privkey-file "$DNSTT_KEY_FILE" -pubkey-file "$DNSTT_PUB_FILE" >/dev/null 2>&1
+
+    if [ ! -f "$DNSTT_PUB_FILE" ]; then
+        echo -e "${C_RED}❌ Failed to generate DNSTT keypair.${C_RESET}"
+        return
+    fi
+
+    local pub_key
+    pub_key=$(cat "$DNSTT_PUB_FILE" 2>/dev/null | tr -d ' \n\r')
+
+    cat > "$DNSTT_INFO_FILE" <<EOF
+TUNNEL_DOMAIN="$ns_domain"
+PUBLIC_KEY="$pub_key"
+FORWARD_TARGET="$target_addr"
+FORWARD_DESC="$forward_desc"
+EOF
+
+    echo -e "${C_BLUE}📝 Creating systemd service file...${C_RESET}"
+    cat > "$DNSTT_SERVICE_FILE" <<EOF
+[Unit]
+Description=DNSTT SlowDNS Server (${forward_desc}) by NOVA XTUNNEL
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=$DNSTT_BIN -udp :$DNSTT_LISTEN_PORT -privkey-file $DNSTT_KEY_FILE $ns_domain $target_addr
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    echo -e "${C_BLUE}🔥 Configuring Firewall & Port 53 Redirection (53/udp -> $DNSTT_LISTEN_PORT)...${C_RESET}"
+    check_and_open_firewall_port 53 udp || true
+    local iface
+    iface=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+    if [ -n "$iface" ]; then
+        iptables -t nat -D PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
+        iptables -t nat -A PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT"
+    fi
+
+    echo -e "\n${C_GREEN}🚀 Starting DNSTT Service...${C_RESET}"
+    systemctl daemon-reload
+    systemctl enable dnstt.service >/dev/null 2>&1
+    systemctl restart dnstt.service
+    sleep 2
+
+    if systemctl is-active --quiet dnstt.service; then
+        echo -e "\n${C_GREEN}✅ SlowDNS (DNSTT) Installed Successfully!${C_RESET}"
+        echo -e "   - Nameserver (NS): ${C_YELLOW}${ns_domain}${C_RESET}"
+        echo -e "   - Public Key     : ${C_YELLOW}${pub_key}${C_RESET}"
+        echo -e "   - Mode / Target  : ${C_YELLOW}${forward_desc}${C_RESET} (${target_addr})"
+        echo -e "   - Public Port    : ${C_YELLOW}53 UDP${C_RESET} (redirected to ${DNSTT_LISTEN_PORT})"
+    else
+        echo -e "\n${C_RED}❌ DNSTT Service failed to start. Check logs: journalctl -u dnstt.service${C_RESET}"
+    fi
+}
+
+uninstall_slowdns() {
+    clear; show_banner
+    echo -e "${C_BOLD}${C_PURPLE}--- 🗑️ Uninstall SlowDNS (DNSTT) ---${C_RESET}"
+
+    if [ ! -f "$DNSTT_SERVICE_FILE" ] && [ ! -f "$DNSTT_BIN" ]; then
+        echo -e "\n${C_YELLOW}ℹ️ SlowDNS (DNSTT) does not appear to be installed.${C_RESET}"
+        return
+    fi
+
+    read -p "👉 Are you sure you want to uninstall SlowDNS (DNSTT)? (y/n): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo -e "${C_YELLOW}Cancelled.${C_RESET}"
+        return
+    fi
+
+    echo -e "\n${C_BLUE}🛑 Stopping services...${C_RESET}"
+    systemctl stop dnstt.service 2>/dev/null
+    systemctl disable dnstt.service 2>/dev/null
+    systemctl stop dnstt-mux.service 2>/dev/null
+    systemctl disable dnstt-mux.service 2>/dev/null
+
+    echo -e "${C_BLUE}🗑️ Removing files...${C_RESET}"
+    rm -f "$DNSTT_SERVICE_FILE" "/etc/systemd/system/dnstt-mux.service" "/etc/haproxy/haproxy-dnstt-mux.cfg"
+    rm -f "$DNSTT_BIN"
+    rm -f "$DNSTT_INFO_FILE" "$DNSTT_KEY_FILE" "$DNSTT_PUB_FILE"
+
+    local iface
+    iface=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+    if [ -n "$iface" ]; then
+        iptables -t nat -D PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
+    fi
+
+    systemctl daemon-reload
+    echo -e "\n${C_GREEN}✅ SlowDNS (DNSTT) Uninstalled Successfully.${C_RESET}"
+}
     _ff_rebuild_udp_dnat_rules
 
     echo -e "\n${C_GREEN}✅ SlowUDP Uninstalled Successfully.${C_RESET}"
@@ -5135,7 +5461,8 @@ protocol_menu() {
         local udp_custom_status; if systemctl is-active --quiet udp-custom; then udp_custom_status="${C_STATUS_A}(Active)${C_RESET}"; else udp_custom_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
         local zivpn_status; if systemctl is-active --quiet zivpn.service; then zivpn_status="${C_STATUS_A}(Active)${C_RESET}"; else zivpn_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
         local slowudp_status; if systemctl is-active --quiet slowudp-server.service; then slowudp_status="${C_STATUS_A}(Active)${C_RESET}"; else slowudp_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
-        
+        local slowdns_status; if systemctl is-active --quiet dnstt.service; then slowdns_status="${C_STATUS_A}(Active)${C_RESET}"; else slowdns_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
+
         local ssl_tunnel_text="HAProxy Edge Stack (80/443)"
         local ssl_tunnel_status="${C_STATUS_I}(Inactive)${C_RESET}"
         if systemctl is-active --quiet haproxy; then
@@ -5145,7 +5472,7 @@ protocol_menu() {
         local nginx_status; if systemctl is-active --quiet nginx; then nginx_status="${C_STATUS_A}(Active)${C_RESET}"; else nginx_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
         local xui_status; if command -v x-ui &> /dev/null; then xui_status="${C_STATUS_A}(Installed)${C_RESET}"; else xui_status="${C_STATUS_I}(Not Installed)${C_RESET}"; fi
         local pyproxy_status; if systemctl is-active --quiet pyproxy-socks.service || systemctl is-active --quiet pyproxy-ws.service; then pyproxy_status="${C_STATUS_A}(Active)${C_RESET}"; else pyproxy_status="${C_STATUS_I}(Inactive)${C_RESET}"; fi
-        
+
         echo -e "\n${C_TITLE}══════════════[ ${C_BOLD}🔌 PROTOCOL & PANEL MANAGEMENT ${C_RESET}${C_TITLE}]══════════════${C_RESET}"
         echo -e "  ${C_ACCENT}--- TUNNELLING PROTOCOLS---${C_RESET}"
         printf "  ${C_CHOICE}[ 1]${C_RESET} %-45s %s\n" "🚀 Install badvpn (UDP 7300)" "$badvpn_status"
@@ -5158,13 +5485,15 @@ protocol_menu() {
         printf "  ${C_CHOICE}[ 8]${C_RESET} %-45s\n" "🗑️ Uninstall ZiVPN"
         printf "  ${C_CHOICE}[ 9]${C_RESET} %-45s %s\n" "🐌 Install SlowUDP (Hysteria)" "$slowudp_status"
         printf "  ${C_CHOICE}[10]${C_RESET} %-45s\n" "🗑️ Uninstall SlowUDP"
-        printf "  ${C_CHOICE}[11]${C_RESET} %-45s %s\n" "🌐 Install/Manage Internal Nginx (8880/8443)" "$nginx_status"
-        printf "  ${C_CHOICE}[12]${C_RESET} %-45s %s\n" "🐍 Install PY SOCKS/WS Proxy (legacy)" "$pyproxy_status"
-        printf "  ${C_CHOICE}[13]${C_RESET} %-45s\n" "🗑️ Uninstall PY SOCKS/WS Proxy"
+        printf "  ${C_CHOICE}[11]${C_RESET} %-45s %s\n" "📡 Install SSH SlowDNS (DNSTT Port 53)" "$slowdns_status"
+        printf "  ${C_CHOICE}[12]${C_RESET} %-45s\n" "🗑️ Uninstall SSH SlowDNS"
+        printf "  ${C_CHOICE}[13]${C_RESET} %-45s %s\n" "🌐 Install/Manage Internal Nginx (8880/8443)" "$nginx_status"
+        printf "  ${C_CHOICE}[14]${C_RESET} %-45s %s\n" "🐍 Install PY SOCKS/WS Proxy (legacy)" "$pyproxy_status"
+        printf "  ${C_CHOICE}[15]${C_RESET} %-45s\n" "🗑️ Uninstall PY SOCKS/WS Proxy"
 
         echo -e "  ${C_ACCENT}--- 💻 MANAGEMENT PANELS ---${C_RESET}"
-        printf "  ${C_CHOICE}[14]${C_RESET} %-45s %s\n" "💻 Install X-UI Panel" "$xui_status"
-        printf "  ${C_CHOICE}[15]${C_RESET} %-45s\n" "🗑️ Uninstall X-UI Panel"
+        printf "  ${C_CHOICE}[16]${C_RESET} %-45s %s\n" "💻 Install X-UI Panel" "$xui_status"
+        printf "  ${C_CHOICE}[17]${C_RESET} %-45s\n" "🗑️ Uninstall X-UI Panel"
 
         echo -e " ${C_DIM}══════════════════════════════════════════════════════${C_RESET}"
         echo -e "   ${C_WARN}[ 0]${C_RESET} ↩️ Return to Main Menu"
@@ -5179,9 +5508,10 @@ protocol_menu() {
             5) install_ssl_tunnel; press_enter ;; 6) uninstall_ssl_tunnel; press_enter ;;
             7) install_zivpn; press_enter ;; 8) uninstall_zivpn; press_enter ;;
             9) install_slowudp; press_enter ;; 10) uninstall_slowudp; press_enter ;;
-            11) nginx_proxy_menu ;;
-            12) install_pyproxy; press_enter ;; 13) uninstall_pyproxy; press_enter ;;
-            14) install_xui_panel; press_enter ;; 15) uninstall_xui_panel; press_enter ;;
+            11) install_slowdns; press_enter ;; 12) uninstall_slowdns; press_enter ;;
+            13) nginx_proxy_menu ;;
+            14) install_pyproxy; press_enter ;; 15) uninstall_pyproxy; press_enter ;;
+            16) install_xui_panel; press_enter ;; 17) uninstall_xui_panel; press_enter ;;
             0) return ;;
             *) invalid_option ;;
         esac
@@ -5251,6 +5581,8 @@ uninstall_script() {
     uninstall_ssl_tunnel
     uninstall_pyproxy
     uninstall_zivpn
+    uninstall_slowudp
+    uninstall_slowdns
     delete_dns_record
     
     echo -e "\n${C_BLUE}🔄 Reloading systemd daemon...${C_RESET}"
@@ -5576,6 +5908,24 @@ generate_client_config() {
         echo -e "\n🔹 ${C_BOLD}PY SOCKS/WS Proxy${C_RESET}:"
         systemctl is-active --quiet pyproxy-socks && echo -e "   • SOCKS Port: ${SOCKS_PORT} (HTTP 200)"
         systemctl is-active --quiet pyproxy-ws && echo -e "   • WebSocket Port: ${WS_PORT} (HTTP 101)"
+    fi
+
+    # 6. SlowDNS (DNSTT)
+    if systemctl is-active --quiet dnstt; then
+        local dnstt_domain="" dnstt_pub="" dnstt_target="127.0.0.1:22" dnstt_desc="SSH"
+        if [ -f "/etc/novaxtunnel/dnstt_info.conf" ]; then
+            source "/etc/novaxtunnel/dnstt_info.conf"
+            dnstt_domain="$TUNNEL_DOMAIN"
+            dnstt_pub="$PUBLIC_KEY"
+            dnstt_target="${FORWARD_TARGET:-127.0.0.1:22}"
+            dnstt_desc="${FORWARD_DESC:-SSH only}"
+        fi
+        echo -e "\n🔹 ${C_BOLD}SlowDNS (DNSTT - ${dnstt_desc})${C_RESET}:"
+        echo -e "   • Nameserver: ${dnstt_domain:-(non configuré)}"
+        echo -e "   • Public Key: ${dnstt_pub:-(non configuré)}"
+        echo -e "   • Mode / Target: ${dnstt_desc} (${dnstt_target})"
+        echo -e "   • DNS IP: 1.1.1.1 / 8.8.8.8"
+        echo -e "   • Port: 53 UDP"
     fi
     
     echo -e "${C_YELLOW}========================================${C_RESET}"
@@ -5990,6 +6340,7 @@ if [[ "$1" == "--exec" ]]; then
         install_ssl_tunnel|uninstall_ssl_tunnel|\
         install_zivpn|uninstall_zivpn|\
         install_slowudp|uninstall_slowudp|\
+        install_slowdns|uninstall_slowdns|\
         torrent_block_enable|torrent_block_disable)
             "$action" </dev/null
             exit $?

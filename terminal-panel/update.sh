@@ -14,7 +14,7 @@ chmod +x /usr/local/bin/menu
 
 # Falcon Proxy has been removed from the panel entirely - clean up any leftover files from
 # a server that was updated before this removal, so nothing unused lingers on disk.
-rm -rf /opt/novaxtunnel/falconproxy
+rm -rf "$SCRIPT_DIR/falconproxy" /opt/nova-x-tunnel/falconproxy /opt/novaxtunnel/falconproxy 2>/dev/null || true
 
 echo "✅ Commande 'menu' mise à jour."
 echo "(La configuration SSH existante n'est pas retouchée par une mise à jour."

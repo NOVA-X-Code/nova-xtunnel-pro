@@ -4,7 +4,7 @@ const cryptoLib = require('./crypto');
 
 function generateRandomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'NXT-';
+  let code = 'NOVA-';
   for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
   code += '-';
   for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -52,20 +52,27 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
   [...baseTemplates, ...globalTemplates, ...extraTemplates].forEach(t => map.set(t.id, t));
   const allTemplates = Array.from(map.values());
 
+  // Generate unified master credentials for this access code:
+  // - The SAME master UUID is used across all V2Ray/Xray inbounds (VLESS, VMess, Trojan)
+  // - The SAME master SSH user & password are used across all SSH/UDP/SlowDNS templates
+  const masterUuid = crypto.randomUUID();
+  const masterSshUser = `nxt_${code.substring(4, 8).toLowerCase()}_${Math.floor(100 + Math.random() * 900)}`;
+  const masterSshPass = generateRandomPassword();
+
   for (const t of allTemplates) {
     let clientUuidOrUser = t.default_user || 'nxt_user';
     let clientPassword = t.default_pass || 'nxt_pass';
     const clientEmailTag = `code_${code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
 
     // Apply the isCustomizable rule:
-    // If is_customizable = 1 (or template is an extra reseller template), regenerate unique credentials!
+    // If is_customizable = 1 (or template is an extra reseller template), use unique master credentials!
     if (t.is_customizable === 1 || t.is_base_config === 0) {
-      if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol === 'slowdns') {
-        clientUuidOrUser = crypto.randomUUID();
+      if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan') {
+        clientUuidOrUser = masterUuid;
         clientPassword = null;
-      } else if (t.protocol === 'ssh' || t.protocol === 'udp') {
-        clientUuidOrUser = `nxt_${code.substring(4, 8).toLowerCase()}_${Math.floor(100 + Math.random() * 900)}`;
-        clientPassword = generateRandomPassword();
+      } else if (t.protocol === 'ssh' || t.protocol === 'udp' || t.protocol === 'slowdns') {
+        clientUuidOrUser = masterSshUser;
+        clientPassword = masterSshPass;
       }
     }
 
