@@ -170,7 +170,7 @@ router.post('/access-codes', (req, res) => {
     });
 
     if (hwid && hwid.trim().length > 0) {
-      db.prepare('UPDATE access_codes SET allowed_hwids = ? WHERE id = ?').run(hwid.trim(), result.accessCodeId);
+      db.prepare('UPDATE access_codes SET allowed_hwids = ? WHERE id = ?').run(hwid.trim().toUpperCase(), result.accessCodeId);
     }
 
     audit.log('reseller', req.session.username, 'create_access_code', `Code Premium généré: ${result.code}`, reseller.id);
@@ -178,6 +178,66 @@ router.post('/access-codes', (req, res) => {
   } catch (e) {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }
+});
+
+router.post('/access-codes/:id/edit', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    const { clientReference, maxDataGb, expiryDays, hwid, status } = req.body;
+    const codeId = req.params.id;
+
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ? AND reseller_id = ?').get(codeId, reseller.id);
+    if (!codeRow) throw new Error("Code d'accès introuvable.");
+
+    let expiryDateStr = codeRow.expiry_date;
+    const validDays = parseInt(expiryDays, 10);
+    if (!isNaN(validDays) && validDays > 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + validDays);
+      expiryDateStr = d.toISOString().split('T')[0];
+    }
+
+    db.prepare(`
+      UPDATE access_codes SET
+        client_reference = ?,
+        max_data_gb = ?,
+        expiry_days = ?,
+        expiry_date = ?,
+        allowed_hwids = ?,
+        status = ?
+      WHERE id = ? AND reseller_id = ?
+    `).run(
+      clientReference || '',
+      parseFloat(maxDataGb) || 0,
+      validDays || 30,
+      expiryDateStr,
+      hwid ? hwid.trim().toUpperCase() : '',
+      status || 'active',
+      codeId,
+      reseller.id
+    );
+
+    audit.log('reseller', req.session.username, 'edit_access_code', `Code Premium modifié : ${codeRow.code}`, reseller.id);
+    res.redirect('/reseller/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour.`));
+  } catch (e) {
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes/:id/delete', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    db.prepare('DELETE FROM access_codes WHERE id = ? AND reseller_id = ?').run(req.params.id, reseller.id);
+    audit.log('reseller', req.session.username, 'delete_access_code', `Code Premium supprimé`, reseller.id);
+    res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
+  } catch (e) {
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
 });
 
 router.post('/access-codes/:id/delete', (req, res) => {

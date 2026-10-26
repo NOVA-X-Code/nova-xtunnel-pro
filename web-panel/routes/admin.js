@@ -328,6 +328,48 @@ router.post('/access-codes', (req, res) => {
   }
 });
 
+router.post('/access-codes/:id/edit', (req, res) => {
+  try {
+    const { clientReference, maxDataGb, expiryDays, hwid, status } = req.body;
+    const codeId = req.params.id;
+
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeId);
+    if (!codeRow) throw new Error("Code d'accès introuvable.");
+
+    let expiryDateStr = codeRow.expiry_date;
+    const validDays = parseInt(expiryDays, 10);
+    if (!isNaN(validDays) && validDays > 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + validDays);
+      expiryDateStr = d.toISOString().split('T')[0];
+    }
+
+    db.prepare(`
+      UPDATE access_codes SET
+        client_reference = ?,
+        max_data_gb = ?,
+        expiry_days = ?,
+        expiry_date = ?,
+        allowed_hwids = ?,
+        status = ?
+      WHERE id = ?
+    `).run(
+      clientReference || '',
+      parseFloat(maxDataGb) || 0,
+      validDays || 30,
+      expiryDateStr,
+      hwid ? hwid.trim().toUpperCase() : '',
+      status || 'active',
+      codeId
+    );
+
+    audit.log('admin', req.session.username, 'edit_access_code', `Code d'accès modifié : ${codeRow.code}`, null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour avec succès.`));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
 router.post('/access-codes/:id/delete', (req, res) => {
   try {
     db.prepare('DELETE FROM access_codes WHERE id = ?').run(req.params.id);

@@ -133,14 +133,15 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
     throw new Error("Access Code Data Limit Reached.");
   }
 
-  // Bind HWID if not bound yet
+  // Bind HWID if not bound yet (case-insensitive & trimmed)
   if (hwid && hwid.trim().length > 0) {
+    const cleanHwid = hwid.trim().toUpperCase();
     if (!accessCode.allowed_hwids || accessCode.allowed_hwids.trim().length === 0) {
-      db.prepare("UPDATE access_codes SET allowed_hwids = ? WHERE id = ?").run(hwid.trim(), accessCode.id);
+      db.prepare("UPDATE access_codes SET allowed_hwids = ? WHERE id = ?").run(cleanHwid, accessCode.id);
     } else {
-      const allowedList = accessCode.allowed_hwids.split(/[,;\s]+/);
-      if (!allowedList.includes(hwid.trim())) {
-        throw new Error("Access Code locked to another device.");
+      const allowedList = accessCode.allowed_hwids.toUpperCase().split(/[,;\s]+/);
+      if (!allowedList.includes(cleanHwid)) {
+        throw new Error("Ce Code Premium est verrouillé sur un autre appareil.");
       }
     }
   }
