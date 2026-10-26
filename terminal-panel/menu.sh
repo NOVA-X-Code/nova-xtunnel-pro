@@ -3121,7 +3121,7 @@ write_internal_nginx_config() {
 
     # The proxy locations are identical for every domain, so they live in one shared snippet
     # included by each server block.
-    cat > "$NGINX_LOCATIONS_SNIPPET" <<EOF
+    cat > "$NGINX_LOCATIONS_SNIPPET" <<'EOF'
     location ~ ^/(?<fwdport>\d+)/(?<fwdpath>.*)$ {
         client_max_body_size 0;
         client_body_timeout 1d;
@@ -3132,24 +3132,24 @@ write_internal_nginx_config() {
         proxy_buffering off;
         proxy_request_buffering off;
         proxy_socket_keepalive on;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        if (\$content_type ~* "GRPC") { grpc_pass grpc://127.0.0.1:\$fwdport\$is_args\$args; break; }
-        proxy_pass http://127.0.0.1:\$fwdport\$is_args\$args;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        if ($content_type ~* "GRPC") { grpc_pass grpc://127.0.0.1:$fwdport$is_args$args; break; }
+        proxy_pass http://127.0.0.1:$fwdport$is_args$args;
         break;
     }
 
     location /api/ {
         proxy_read_timeout 300s;
         proxy_http_version 1.1;
-        proxy_pass http://127.0.0.1:${panel_port};
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass http://127.0.0.1:__PANEL_PORT__;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location / {
@@ -3168,6 +3168,7 @@ write_internal_nginx_config() {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 EOF
+    sed -i "s|__PANEL_PORT__|$panel_port|g" "$NGINX_LOCATIONS_SNIPPET"
 
     # Default server: main self-signed certificate "novaxtunnel" (VPS IP / unknown SNI).
     cat > "$NGINX_CONFIG_FILE" <<EOF
