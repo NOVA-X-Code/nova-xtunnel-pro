@@ -41,8 +41,8 @@ router.post('/download-config', (req, res) => {
       });
 
       const activeNotif = db.prepare('SELECT * FROM broadcast_notifications WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
-      const customUpdateMsgRow = db.prepare('SELECT value FROM app_settings WHERE key = "update_message"').get();
-      const customVersionRow = db.prepare('SELECT value FROM app_settings WHERE key = "app_version"').get();
+      const customUpdateMsgRow = db.prepare("SELECT value FROM app_settings WHERE key = 'update_message'").get();
+      const customVersionRow = db.prepare("SELECT value FROM app_settings WHERE key = 'app_version'").get();
 
       const updateMsg = (customUpdateMsgRow && customUpdateMsgRow.value)
         ? customUpdateMsgRow.value

@@ -195,8 +195,8 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   const expTimestamp = accessCode.expiry_date ? new Date(accessCode.expiry_date + "T23:59:59").getTime() : 0;
 
   const activeNotif = db.prepare('SELECT * FROM broadcast_notifications WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
-  const customUpdateMsgRow = db.prepare('SELECT value FROM app_settings WHERE key = "update_message"').get();
-  const customVersionRow = db.prepare('SELECT value FROM app_settings WHERE key = "app_version"').get();
+  const customUpdateMsgRow = db.prepare("SELECT value FROM app_settings WHERE key = 'update_message'").get();
+  const customVersionRow = db.prepare("SELECT value FROM app_settings WHERE key = 'app_version'").get();
 
   const defaultMsg = `<b>★ Code Premium Actif</b><br/>Code: ${accessCode.code}${accessCode.client_reference ? ' (' + accessCode.client_reference + ')' : ''}<br/>Data: ${accessCode.consumed_data_gb.toFixed(2)} Go / ${accessCode.max_data_gb > 0 ? accessCode.max_data_gb + ' Go' : 'Illimité'}`;
   const updateMsg = (customUpdateMsgRow && customUpdateMsgRow.value) ? customUpdateMsgRow.value : defaultMsg;

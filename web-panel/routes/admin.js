@@ -285,9 +285,9 @@ router.post('/config-templates/:id/edit', (req, res) => {
 router.post('/app-settings', (req, res) => {
   try {
     const { update_message, app_version } = req.body;
-    db.prepare('INSERT INTO app_settings (key, value) VALUES ("update_message", ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(update_message || '');
+    db.prepare("INSERT INTO app_settings (key, value) VALUES ('update_message', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(update_message || '');
     if (app_version) {
-      db.prepare('INSERT INTO app_settings (key, value) VALUES ("app_version", ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(app_version);
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('app_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(app_version);
     }
     audit.log('admin', req.session.username, 'update_app_settings', 'Paramètres App et message de mise à jour enregistrés', null);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Message de mise à jour de l\'application enregistré.'));
