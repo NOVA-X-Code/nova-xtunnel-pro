@@ -107,6 +107,11 @@ CREATE TABLE IF NOT EXISTS broadcast_notifications (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor_type TEXT NOT NULL,     -- 'admin' | 'reseller' | 'system'

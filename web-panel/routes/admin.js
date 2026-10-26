@@ -164,10 +164,16 @@ router.get('/access-codes', (req, res) => {
   `).all();
   const notifications = db.prepare('SELECT * FROM broadcast_notifications ORDER BY id DESC').all();
 
+  const appSettingsRows = db.prepare('SELECT * FROM app_settings').all();
+  const appSettings = {};
+  appSettingsRows.forEach(s => appSettings[s.key] = s.value);
+
   res.render('admin/access_codes', {
     templates,
     accessCodes,
     notifications,
+    appSettings,
+    domain: config.DOMAIN || req.hostname,
     error: req.query.error,
     success: req.query.success
   });
@@ -216,6 +222,79 @@ router.post('/config-templates', (req, res) => {
       is_global_premium,
       parseFloat(max_data_gb) || 0
     );
+
+    audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/config-templates/:id/edit', (req, res) => {
+  try {
+    const { name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass, access_type, is_customizable, is_quota_counted, max_data_gb } = req.body;
+
+    let is_base_config = 0;
+    let is_global_premium = 0;
+
+    if (access_type === 'base' || req.body.is_base_config === '1') {
+      is_base_config = 1;
+    } else if (access_type === 'global_premium' || req.body.is_global_premium === '1') {
+      is_global_premium = 1;
+    }
+
+    db.prepare(`
+      UPDATE config_templates SET
+        name = ?, info = ?, flag = ?, protocol = ?, server_ip = ?, server_port = ?, proxy_ip = ?, proxy_port = ?, payload = ?, sni = ?, v2ray_link = ?, public_key = ?, nameserver = ?, dns_server = ?, xray_inbound_id = ?, path = ?, default_user = ?, default_pass = ?,
+        is_base_config = ?, is_customizable = ?, is_quota_counted = ?, is_global_premium = ?, max_data_gb = ?
+      WHERE id = ?
+    `).run(
+      name,
+      info || '',
+      flag || 'fr',
+      protocol,
+      server_ip || '',
+      parseInt(server_port, 10) || 443,
+      proxy_ip || '',
+      parseInt(proxy_port, 10) || 8080,
+      payload || '',
+      sni || '',
+      v2ray_link || '',
+      public_key || '',
+      nameserver || '',
+      dns_server || '8.8.8.8',
+      xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
+      path || '',
+      default_user || null,
+      default_pass || null,
+      is_base_config,
+      (is_customizable === '1' || access_type === 'global_premium' || access_type === 'reseller_option') ? 1 : 0,
+      is_quota_counted === '1' ? 1 : 0,
+      is_global_premium,
+      parseFloat(max_data_gb) || 0,
+      req.params.id
+    );
+
+    audit.log('admin', req.session.username, 'edit_template', `Template mis à jour : ${name}`, req.params.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Configuration serveur mise à jour.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/app-settings', (req, res) => {
+  try {
+    const { update_message, app_version } = req.body;
+    db.prepare('INSERT INTO app_settings (key, value) VALUES ("update_message", ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(update_message || '');
+    if (app_version) {
+      db.prepare('INSERT INTO app_settings (key, value) VALUES ("app_version", ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(app_version);
+    }
+    audit.log('admin', req.session.username, 'update_app_settings', 'Paramètres App et message de mise à jour enregistrés', null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Message de mise à jour de l\'application enregistré.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
 
     audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));

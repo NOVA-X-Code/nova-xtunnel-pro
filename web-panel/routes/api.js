@@ -41,11 +41,22 @@ router.post('/download-config', (req, res) => {
       });
 
       const activeNotif = db.prepare('SELECT * FROM broadcast_notifications WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
+      const customUpdateMsgRow = db.prepare('SELECT value FROM app_settings WHERE key = "update_message"').get();
+      const customVersionRow = db.prepare('SELECT value FROM app_settings WHERE key = "app_version"').get();
+
+      const updateMsg = (customUpdateMsgRow && customUpdateMsgRow.value)
+        ? customUpdateMsgRow.value
+        : "<b>★ Application NovaXTunnel à jour</b><br/>Serveurs de base chargés avec succès.";
+
+      const appVersion = (customVersionRow && customVersionRow.value)
+        ? customVersionRow.value
+        : "1.0.5";
 
       const defaultConfigJson = {
-        Version: "2026.2.0",
-        UpdateMessage: "<b>★ Application NovaXTunnel à jour</b><br/>Serveurs de base chargés avec succès.",
+        Version: appVersion,
+        UpdateMessage: updateMsg,
         expirationDate: 0,
+        allowedHwids: [],
         AdminNotification: activeNotif ? {
           id: activeNotif.id,
           title: activeNotif.title,

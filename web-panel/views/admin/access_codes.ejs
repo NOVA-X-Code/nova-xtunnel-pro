@@ -145,7 +145,7 @@
 
   <div class="main-content">
     <!-- TOP HEADER -->
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; margin-bottom:32px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; margin-bottom:28px;">
       <div>
         <h1 style="font-size:28px; font-weight:900; margin:0; letter-spacing:-0.5px; background: linear-gradient(135deg, #FFF, #94A3B8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Serveurs, Modes App & Clés Premium</h1>
         <p style="color:#94A3B8; margin:6px 0 0 0; font-size:14px;">Configurez les modes de connexion transmis à l'application Android NovaXTunnel et gérez vos clés d'accès.</p>
@@ -174,6 +174,39 @@
         ✅ <%= success %>
       </div>
     <% } %>
+
+    <!-- CARDS PARAMÈTRES API APP & UPDATE MESSAGE -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:20px; margin-bottom:28px;">
+      <!-- CARD 1: URL API Android -->
+      <div class="stat-card" style="border-color:rgba(56, 189, 248, 0.3);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:15px; color:#38BDF8; font-weight:800;">🌐 Endpoint API Android NovaXTunnel</h3>
+          <span class="badge badge-blue">API v1</span>
+        </div>
+        <p style="font-size:12px; color:#94A3B8; margin:0 0 10px 0;">URL configurée dans votre application Android pour télécharger les serveurs et valider les clés :</p>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="text" readonly value="https://<%= domain %>/api/v1/download-config" class="form-control" style="font-family:monospace; color:#38BDF8; background:rgba(0,0,0,0.4);" id="apiEndpointInput" />
+          <button class="btn-ghost small" onclick="navigator.clipboard.writeText(document.getElementById('apiEndpointInput').value); copyCode('URL API');" style="padding:10px 14px; white-space:nowrap;">📋 Copier</button>
+        </div>
+      </div>
+
+      <!-- CARD 2: Message de Mise à Jour App (UpdateMessage) -->
+      <div class="stat-card" style="border-color:rgba(124, 92, 255, 0.3);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3 style="margin:0; font-size:15px; color:#C4B5FD; font-weight:800;">💬 Message de Mise à Jour (`UpdateMessage`)</h3>
+          <span class="badge badge-purple">Version App: <%= (typeof appSettings !== 'undefined' && appSettings.app_version) ? appSettings.app_version : '1.0.5' %></span>
+        </div>
+        <form method="POST" action="/admin/app-settings">
+          <div style="display:grid; grid-template-columns:1fr 3fr; gap:10px; margin-bottom:10px;">
+            <input type="text" name="app_version" value="<%= (typeof appSettings !== 'undefined' && appSettings.app_version) ? appSettings.app_version : '1.0.5' %>" placeholder="Version (ex: 1.0.5)" class="form-control" style="font-size:12px;" />
+            <textarea name="update_message" rows="2" placeholder="Message HTML affiché dans l'App (ex: <b>Mise à jour réussie !</b><br/>...)" class="form-control" style="font-size:12px; resize:vertical;"><%= (typeof appSettings !== 'undefined' && appSettings.update_message) ? appSettings.update_message : '<b>★ Application NovaXTunnel à jour</b><br/>Serveurs chargés avec succès.' %></textarea>
+          </div>
+          <div style="text-align:right;">
+            <button type="submit" class="btn-glow btn-glow-primary" style="padding:6px 14px; font-size:12px;">Enregistrer Message App</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- SECTION 1: NOTIFICATIONS BROADCAST ADMIN -->
     <% if (typeof notifications !== 'undefined' && notifications.length > 0) { %>
@@ -277,6 +310,7 @@
                     <% } %>
                   </td>
                   <td style="padding:16px 10px; text-align:right;">
+                    <button class="btn-ghost small" style="color:#38BDF8; margin-right:6px;" onclick='openEditTemplateModal(<%- JSON.stringify(t) %>)'>✏️ Éditer</button>
                     <form method="POST" action="/admin/config-templates/<%= t.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce mode de configuration ?');">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
@@ -632,6 +666,121 @@
     </div>
   </div>
 
+  <!-- MODAL 2.5: ÉDITER UNE CONFIGURATION SERVEUR -->
+  <div id="modalEditTemplate" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+          <h3 style="margin:0; font-size:20px; font-weight:900;">✏️ Éditer la Configuration Serveur</h3>
+          <p style="margin:4px 0 0 0; font-size:12px; color:#94A3B8;">Modifiez les paramètres du serveur transmis à l'application Android.</p>
+        </div>
+        <button onclick="closeModal('modalEditTemplate')" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:22px;">✕</button>
+      </div>
+
+      <form method="POST" id="formEditTemplate" action="">
+        <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label>Nom du Serveur (`Name`)</label>
+            <input type="text" name="name" id="editName" required class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Info (`Info`)</label>
+            <input type="text" name="info" id="editInfo" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Drapeau (`Flag`)</label>
+            <select name="flag" id="editFlag" class="form-control">
+              <option value="fr">🇫🇷 France (fr)</option>
+              <option value="cm">🇨🇲 Cameroun (cm)</option>
+              <option value="ci">🇨🇮 Côte d'Ivoire (ci)</option>
+              <option value="us">🇺🇸 USA (us)</option>
+              <option value="de">🇩🇪 Allemagne (de)</option>
+              <option value="ca">🇨🇦 Canada (ca)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="form-group">
+            <label>Protocole (`TYPE`)</label>
+            <select name="protocol" id="editProtocol" class="form-control">
+              <option value="SSH_DIRECT">SSH Direct</option>
+              <option value="SSH_PROXY">SSH Proxy</option>
+              <option value="SSH_SSL">SSH SSL</option>
+              <option value="PAY_SSL">Payload + SSL</option>
+              <option value="SLOWDNS">SlowDNS</option>
+              <option value="XRAY_DIRECT">XRay Direct</option>
+              <option value="XRAY_PROXY">XRay Proxy</option>
+              <option value="XRAY_SLOWDNS">XRay SlowDNS</option>
+              <option value="XTUNNEL">XTunnel UDP</option>
+              <option value="UDP">UDP ZiVPN</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>IP / Domaine (`ServerIP`)</label>
+            <input type="text" name="server_ip" id="editServerIp" class="form-control" />
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label>Port (`ServerPort`)</label>
+            <input type="number" name="server_port" id="editServerPort" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Proxy IP (`ProxyIP`)</label>
+            <input type="text" name="proxy_ip" id="editProxyIp" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Proxy Port (`ProxyPort`)</label>
+            <input type="number" name="proxy_port" id="editProxyPort" class="form-control" />
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="form-group">
+            <label>SNI / BugHost (`SSLHost`)</label>
+            <input type="text" name="sni" id="editSni" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Plafond Data Serveur (Go)</label>
+            <input type="number" step="0.5" name="max_data_gb" id="editMaxDataGb" class="form-control" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Payload Custom (`Payload`)</label>
+          <input type="text" name="payload" id="editPayload" class="form-control" />
+        </div>
+
+        <div class="form-group">
+          <label>Lien V2Ray (`v2rayLink`)</label>
+          <input type="text" name="v2ray_link" id="editV2rayLink" class="form-control" />
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label>SlowDNS Clé Publique (`PublicKey`)</label>
+            <input type="text" name="public_key" id="editPublicKey" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Nameserver (`NAMESERVER`)</label>
+            <input type="text" name="nameserver" id="editNameserver" class="form-control" />
+          </div>
+          <div class="form-group">
+            <label>Serveur DNS (`DNS`)</label>
+            <input type="text" name="dns_server" id="editDnsServer" class="form-control" />
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
+          <button type="button" class="btn-ghost" onclick="closeModal('modalEditTemplate')">Annuler</button>
+          <button type="submit" class="btn-glow btn-glow-primary">Enregistrer les Modifications</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL 3: Admin Générer Code Premium -->
   <div id="modalCreateCode" class="modal-overlay">
     <div class="modal-card">
@@ -683,7 +832,7 @@
     function copyCode(code) {
       navigator.clipboard.writeText(code);
       var toast = document.getElementById('toastMsg');
-      toast.innerText = '📋 Code ' + code + ' copié !';
+      toast.innerText = '📋 ' + code + ' copié !';
       toast.style.display = 'block';
       setTimeout(function() {
         toast.style.display = 'none';
@@ -738,7 +887,7 @@
       dnsGroup.style.display = 'none';
 
       if (typeMode === 'SSH_DIRECT') {
-        // Nothing special
+        // Standard
       } else if (typeMode === 'SSH_PROXY') {
         proxyGroup.style.display = 'grid';
         payloadGroup.style.display = 'block';
@@ -760,7 +909,7 @@
         v2rayGroup.style.display = 'block';
         dnsGroup.style.display = 'grid';
       } else if (typeMode === 'XTUNNEL' || typeMode === 'UDP') {
-        // Standard server ip & port
+        // Standard
       }
     }
 
@@ -772,6 +921,27 @@
         if (radios[i].checked) selected = radios[i].value;
       }
       group.style.display = (selected === 'base') ? 'block' : 'none';
+    }
+
+    function openEditTemplateModal(t) {
+      document.getElementById('formEditTemplate').action = '/admin/config-templates/' + t.id + '/edit';
+      document.getElementById('editName').value = t.name || '';
+      document.getElementById('editInfo').value = t.info || '';
+      document.getElementById('editFlag').value = t.flag || 'fr';
+      document.getElementById('editProtocol').value = t.protocol || 'SSH_DIRECT';
+      document.getElementById('editServerIp').value = t.server_ip || '';
+      document.getElementById('editServerPort').value = t.server_port || 22;
+      document.getElementById('editProxyIp').value = t.proxy_ip || '';
+      document.getElementById('editProxyPort').value = t.proxy_port || 8080;
+      document.getElementById('editSni').value = t.sni || '';
+      document.getElementById('editPayload').value = t.payload || '';
+      document.getElementById('editV2rayLink').value = t.v2ray_link || '';
+      document.getElementById('editPublicKey').value = t.public_key || '';
+      document.getElementById('editNameserver').value = t.nameserver || '';
+      document.getElementById('editDnsServer').value = t.dns_server || '8.8.8.8';
+      document.getElementById('editMaxDataGb').value = t.max_data_gb || 0;
+
+      openModal('modalEditTemplate');
     }
 
     document.addEventListener('DOMContentLoaded', function() {
