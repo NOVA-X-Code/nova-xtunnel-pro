@@ -264,12 +264,6 @@ router.post('/broadcast-notifications/:id/delete', (req, res) => {
   }
 });
 
-module.exports = router;
-  } catch (e) {
-    res.redirect('/admin?error=' + encodeURIComponent(e.message));
-  }
-});
-
 router.post('/resellers/:id/clients', (req, res) => {
   const resellerId = req.params.id;
   try {
@@ -316,12 +310,6 @@ router.post('/resellers/:id/reset-quota', (req, res) => {
     const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(id);
     if (!reseller) throw new Error('Reseller introuvable.');
 
-    // Purely a *display* reset: clients and their live usage are left completely untouched,
-    // and the historical "consommé par comptes supprimés" figure is untouched too. We just
-    // capture the reseller's current raw total (live usage + everything banked so far) into
-    // quota_reset_offset_gb, which getResellerStats() subtracts back out - so the displayed
-    // consumed total drops to 0 right now, then grows again only from what's consumed from
-    // this point forward, like zeroing an odometer trip counter.
     const statsBefore = quota.getResellerStats(reseller);
     const rawTotalGb = statsBefore.consumedTotalGb + (reseller.quota_reset_offset_gb || 0);
     db.prepare('UPDATE resellers SET quota_reset_offset_gb = ? WHERE id = ?').run(rawTotalGb, id);
@@ -355,11 +343,6 @@ router.post('/clients/:clientId/password', (req, res) => {
 });
 
 // ---- System management: Protocol Manager / Traffic Monitor / Block Torrent ----
-// Mirrors the terminal panel (menu.sh)'s equivalent menu items - admin-only, since these
-// are server-wide infrastructure changes, not per-reseller/per-client account management.
-// Protocol status is READ-ONLY here (see lib/protocolManager.js) - installing/uninstalling
-// stays in the terminal panel, which can ask the domain/port/version questions some of
-// them need.
 const protocolManager = require('../lib/protocolManager');
 const trafficMonitor = require('../lib/trafficMonitor');
 const torrentBlock = require('../lib/torrentBlock');
