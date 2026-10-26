@@ -1,77 +1,97 @@
 <!DOCTYPE html>
 <html lang="<%= lang %>">
 <head>
-  <%- include('../partials/head', { title: 'Gestion Codes & Templates - Admin NovaXTunnel' }) %>
+  <%- include('../partials/head', { title: 'Serveurs, Codes & Notifications - NovaXTunnel Admin' }) %>
   <style>
     .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 12px; padding: 18px; }
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-    .badge-success { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
-    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
-    .badge-purple { background: rgba(124, 92, 255, 0.15); color: #A78BFA; }
-    .badge-blue { background: rgba(34, 211, 238, 0.15); color: #22D3EE; }
-    .code-box { font-family: monospace; font-size: 14px; font-weight: 700; background: rgba(124, 92, 255, 0.1); color: #A78BFA; padding: 4px 8px; border-radius: 6px; display: inline-block; }
+    .stat-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 16px; padding: 22px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: all 0.2s ease; }
+    .stat-card:hover { border-color: rgba(124, 92, 255, 0.4); }
+
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-success { background: rgba(34, 197, 94, 0.15); color: #22C55E; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-purple { background: rgba(124, 92, 255, 0.15); color: #A78BFA; border: 1px solid rgba(124, 92, 255, 0.3); }
+    .badge-blue { background: rgba(34, 211, 238, 0.15); color: #22D3EE; border: 1px solid rgba(34, 211, 238, 0.3); }
+    .badge-orange { background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    .code-box { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 14px; font-weight: 800; background: rgba(124, 92, 255, 0.12); color: #C4B5FD; padding: 6px 10px; border-radius: 8px; border: 1px dashed rgba(124, 92, 255, 0.3); display: inline-flex; align-items: center; gap: 6px; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted, #94A3B8); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-control { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2A2A3C); background: var(--bg, #12121A); color: var(--text, #F8FAFC); font-size: 13px; outline: none; transition: border-color 0.2s ease; }
+    .form-control:focus { border-color: #7C5CFF; box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15); }
+
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); justify-content: center; align-items: center; z-index: 9999; padding: 16px; }
+    .modal-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 20px; width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; padding: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); animation: modalFade 0.2s ease; }
+    @keyframes modalFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+    .toast-msg { position: fixed; bottom: 20px; right: 20px; background: #22C55E; color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: none; z-index: 10000; animation: toastIn 0.3s ease; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    .help-box { background: rgba(34, 211, 238, 0.08); border-left: 3px solid #22D3EE; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 12px; color: #94A3B8; margin-top: 6px; line-height: 1.5; }
   </style>
 </head>
 <body>
   <%- include('../partials/sidebar') %>
 
   <div class="main-content">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:28px;">
       <div>
-        <h1 style="font-size:24px; font-weight:800; margin:0;">Gestion Templates, Codes & Notifications</h1>
-        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:14px;">Configurez les inbounds 3X-UI, gérez les clés d'accès et envoyez des notifications broadcast à l'application.</p>
+        <h1 style="font-size:26px; font-weight:800; margin:0; letter-spacing:-0.5px;">Gestion des Serveurs, Codes & Notifications</h1>
+        <p style="color:var(--text-muted); margin:6px 0 0 0; font-size:14px;">Ajoutez facilement vos configurations réseau (VLESS, VMess, Trojan, SSH, UDP, SlowDNS) et gérez vos clés d'accès Premium.</p>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn-primary" style="background:#F59E0B;" onclick="document.getElementById('modalSendNotif').style.display='flex'">
-          🔔 Notification App
+        <button class="btn-primary" style="background:#F59E0B; border:none;" onclick="openModal('modalSendNotif')">
+          🔔 Diffuser Notification
         </button>
-        <button class="btn-primary" onclick="document.getElementById('modalAddTemplate').style.display='flex'">
-          + Template/Inbound
+        <button class="btn-primary" style="background:#7C5CFF; border:none;" onclick="openModal('modalAddTemplate')">
+          + Ajouter Serveur / Config
         </button>
-        <button class="btn-primary" style="background:#22C55E;" onclick="document.getElementById('modalCreateCode').style.display='flex'">
-          + Générer Code
+        <button class="btn-primary" style="background:#22C55E; border:none;" onclick="openModal('modalCreateCode')">
+          + Générer Code Premium
         </button>
       </div>
     </div>
 
     <% if (typeof error !== 'undefined' && error) { %>
-      <div style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#EF4444; padding:12px; border-radius:8px; margin-bottom:20px;">
-        <%= error %>
+      <div style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#EF4444; padding:14px 18px; border-radius:12px; margin-bottom:24px; font-weight:600; font-size:14px;">
+        ⚠️ <%= error %>
       </div>
     <% } %>
 
     <% if (typeof success !== 'undefined' && success) { %>
-      <div style="background:rgba(34,197,94,0.15); border:1px solid #22C55E; color:#22C55E; padding:12px; border-radius:8px; margin-bottom:20px;">
-        <%= success %>
+      <div style="background:rgba(34,197,94,0.15); border:1px solid #22C55E; color:#22C55E; padding:14px 18px; border-radius:12px; margin-bottom:24px; font-weight:600; font-size:14px;">
+        ✅ <%= success %>
       </div>
     <% } %>
 
     <!-- SECTION 1: NOTIFICATIONS BROADCAST ADMIN -->
     <% if (typeof notifications !== 'undefined' && notifications.length > 0) { %>
-      <div class="stat-card" style="margin-bottom:24px; border-color:#F59E0B;">
-        <h3 style="margin-top:0; font-size:16px; color:#F59E0B; margin-bottom:12px;">🔔 Notifications Broadcast Diffusées</h3>
+      <div class="stat-card" style="margin-bottom:28px; border-color:rgba(245, 158, 11, 0.4);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <h3 style="margin:0; font-size:16px; color:#F59E0B; font-weight:700;">🔔 Notifications App Actives</h3>
+        </div>
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
             <thead>
               <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
-                <th style="padding:8px;">Titre</th>
-                <th style="padding:8px;">Message</th>
-                <th style="padding:8px;">URL / Lien</th>
-                <th style="padding:8px;">Statut</th>
-                <th style="padding:8px;">Action</th>
+                <th style="padding:10px;">Titre</th>
+                <th style="padding:10px;">Message</th>
+                <th style="padding:10px;">Lien Redirection</th>
+                <th style="padding:10px;">Statut</th>
+                <th style="padding:10px; text-align:right;">Action</th>
               </tr>
             </thead>
             <tbody>
               <% notifications.forEach(n => { %>
                 <tr style="border-bottom:1px solid var(--border);">
-                  <td style="padding:10px; font-weight:600;"><%= n.title %></td>
-                  <td style="padding:10px;"><%= n.message %></td>
-                  <td style="padding:10px; color:var(--text-muted); font-family:monospace;"><%= n.url ? n.url : '-' %></td>
-                  <td style="padding:10px;">
-                    <span class="badge badge-<%= n.is_active ? 'success' : 'danger' %>"><%= n.is_active ? 'Actif' : 'Inactif' %></span>
+                  <td style="padding:12px 10px; font-weight:700; color:#F59E0B;"><%= n.title %></td>
+                  <td style="padding:12px 10px;"><%= n.message %></td>
+                  <td style="padding:12px 10px; color:var(--text-muted); font-family:monospace;"><%= n.url ? n.url : '-' %></td>
+                  <td style="padding:12px 10px;">
+                    <span class="badge badge-<%= n.is_active ? 'success' : 'danger' %>"><%= n.is_active ? 'Active' : 'Inactive' %></span>
                   </td>
-                  <td style="padding:10px;">
+                  <td style="padding:12px 10px; text-align:right;">
                     <form method="POST" action="/admin/broadcast-notifications/<%= n.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer cette notification ?');">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
@@ -84,48 +104,68 @@
       </div>
     <% } %>
 
-    <!-- SECTION 2: TEMPLATES & INBOUNDS -->
-    <div class="stat-card" style="margin-bottom:30px;">
-      <h3 style="margin-top:0; font-size:16px; margin-bottom:16px;">1. Modèles de Configuration & Inbounds (3X-UI / Xray / SSH)</h3>
+    <!-- SECTION 2: TEMPLATES DE CONFIGURATION / SERVEURS -->
+    <div class="stat-card" style="margin-bottom:32px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h3 style="margin:0; font-size:17px; font-weight:800;">1. Configurations Serveurs & Inbounds (Xray / SSH / UDP / SlowDNS)</h3>
+          <p style="margin:4px 0 0 0; font-size:12px; color:var(--text-muted);">Ces serveurs sont transmis aux utilisateurs lors du téléchargement de leur configuration dans l'application Android.</p>
+        </div>
+        <button class="btn-primary" style="background:#7C5CFF; border:none; padding:8px 14px; font-size:12px;" onclick="openModal('modalAddTemplate')">
+          + Ajouter un Serveur
+        </button>
+      </div>
+
       <% if (templates.length === 0) { %>
-        <p style="color:var(--text-muted); font-size:14px; margin:0;">Aucun modèle de config. Ajoutez des inbounds 3X-UI ou des serveurs SSH ci-dessus.</p>
+        <div style="text-align:center; padding:32px; background:rgba(255,255,255,0.02); border-radius:12px; border:1px dashed var(--border);">
+          <p style="color:var(--text-muted); font-size:14px; margin:0 0 12px 0;">Aucune configuration serveur n'a été ajoutée pour l'instant.</p>
+          <button class="btn-primary" style="background:#7C5CFF; border:none;" onclick="openModal('modalAddTemplate')">+ Ajouter le premier serveur</button>
+        </div>
       <% } else { %>
         <div style="overflow-x:auto;">
           <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
             <thead>
-              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
-                <th style="padding:10px;">Nom du Serveur</th>
-                <th style="padding:10px;">Protocole</th>
-                <th style="padding:10px;">Inbound 3X-UI ID</th>
-                <th style="padding:10px;">Type de Config</th>
-                <th style="padding:10px;">Comptabilisé Quota</th>
-                <th style="padding:10px;">Actions</th>
+              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted); text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
+                <th style="padding:12px 10px;">Nom du Serveur</th>
+                <th style="padding:12px 10px;">Protocole</th>
+                <th style="padding:12px 10px;">Adresse IP / Port</th>
+                <th style="padding:12px 10px;">SNI / BugHost</th>
+                <th style="padding:12px 10px;">Inbound 3X-UI</th>
+                <th style="padding:12px 10px;">Type d'Accès</th>
+                <th style="padding:12px 10px; text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody>
               <% templates.forEach(t => { %>
                 <tr style="border-bottom:1px solid var(--border);">
-                  <td style="padding:12px 10px; font-weight:600;"><%= t.name %></td>
-                  <td style="padding:12px 10px;"><span class="badge badge-purple"><%= t.protocol.toUpperCase() %></span></td>
-                  <td style="padding:12px 10px;"><%= t.xray_inbound_id ? '#' + t.xray_inbound_id : '-' %></td>
-                  <td style="padding:12px 10px;">
+                  <td style="padding:14px 10px; font-weight:700;">
+                    <%= t.name %>
+                  </td>
+                  <td style="padding:14px 10px;">
+                    <span class="badge badge-<%= (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan') ? 'purple' : (t.protocol === 'slowdns' ? 'orange' : 'blue') %>">
+                      <%= t.protocol.toUpperCase() %>
+                    </span>
+                  </td>
+                  <td style="padding:14px 10px; font-family:monospace; color:#E2E8F0;">
+                    <%= t.server_ip %>:<%= t.server_port %>
+                  </td>
+                  <td style="padding:14px 10px; font-family:monospace; color:var(--text-muted);">
+                    <%= t.sni ? t.sni : '-' %>
+                  </td>
+                  <td style="padding:14px 10px; color:var(--text-muted);">
+                    <%= t.xray_inbound_id ? 'Inbound #' + t.xray_inbound_id : 'Standard' %>
+                  </td>
+                  <td style="padding:14px 10px;">
                     <% if (t.is_global_premium) { %>
-                      <span class="badge badge-blue">Global Premium Admin</span>
+                      <span class="badge badge-blue">👑 Global Premium Admin</span>
                     <% } else if (t.is_base_config) { %>
-                      <span class="badge badge-purple">Base Gratuit</span>
+                      <span class="badge badge-purple">⭐ Gratuit Base</span>
                     <% } else { %>
                       <span class="badge">Optionnel Revendeur</span>
                     <% } %>
                   </td>
-                  <td style="padding:12px 10px;">
-                    <% if (t.is_quota_counted) { %>
-                      <span class="badge badge-danger">Comptabilisé</span>
-                    <% } else { %>
-                      <span class="badge badge-success">Illimité Revendeur</span>
-                    <% } %>
-                  </td>
-                  <td style="padding:12px 10px;">
-                    <form method="POST" action="/admin/config-templates/<%= t.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce template ?');">
+                  <td style="padding:14px 10px; text-align:right;">
+                    <form method="POST" action="/admin/config-templates/<%= t.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer cette configuration serveur ?');">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
                   </td>
@@ -137,49 +177,67 @@
       <% } %>
     </div>
 
-    <!-- SECTION 3: CODES D'ACCÈS -->
+    <!-- SECTION 3: CODES D'ACCÈS PREMIUM -->
     <div class="stat-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
-        <h3 style="margin:0; font-size:16px;">2. Tous les Codes d'Accès Générés</h3>
-        <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="🔍 Rechercher par code, nom ou téléphone..." style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:280px; font-size:13px;" />
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:14px;">
+        <div>
+          <h3 style="margin:0; font-size:17px; font-weight:800;">2. Tous les Codes d'Accès Générés</h3>
+          <p style="margin:4px 0 0 0; font-size:12px; color:var(--text-muted);">Clés d'accès Premium avec suivi des appareils (HWID) et de la consommation de données.</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="🔍 Rechercher code, client, téléphone..." style="padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:280px; font-size:13px; outline:none;" />
+          <button class="btn-primary" style="background:#22C55E; border:none; padding:10px 16px; font-size:13px;" onclick="openModal('modalCreateCode')">
+            + Nouveau Code Premium
+          </button>
+        </div>
       </div>
 
       <% if (accessCodes.length === 0) { %>
-        <p style="color:var(--text-muted); font-size:14px; margin:0;">Aucun code d'accès généré pour l'instant.</p>
+        <div style="text-align:center; padding:32px; background:rgba(255,255,255,0.02); border-radius:12px; border:1px dashed var(--border);">
+          <p style="color:var(--text-muted); font-size:14px; margin:0 0 12px 0;">Aucune clé d'accès générée pour le moment.</p>
+          <button class="btn-primary" style="background:#22C55E; border:none;" onclick="openModal('modalCreateCode')">+ Générer une clé</button>
+        </div>
       <% } else { %>
         <div style="overflow-x:auto;">
           <table id="codesTable" style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
             <thead>
-              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted);">
-                <th style="padding:10px;">Référence / Client</th>
-                <th style="padding:10px;">Code Premium</th>
-                <th style="padding:10px;">Revendeur</th>
-                <th style="padding:10px;">Consommation Data</th>
-                <th style="padding:10px;">HWID Lié</th>
-                <th style="padding:10px;">Expiration</th>
-                <th style="padding:10px;">Statut</th>
-                <th style="padding:10px;">Actions</th>
+              <tr style="border-bottom:1px solid var(--border); color:var(--text-muted); text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
+                <th style="padding:12px 10px;">Référence Client</th>
+                <th style="padding:12px 10px;">Clé / Code Premium</th>
+                <th style="padding:12px 10px;">Créateur</th>
+                <th style="padding:12px 10px;">Consommation Data</th>
+                <th style="padding:12px 10px;">Empreinte Appareil (HWID)</th>
+                <th style="padding:12px 10px;">Date Expiration</th>
+                <th style="padding:12px 10px;">Statut</th>
+                <th style="padding:12px 10px; text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody>
               <% accessCodes.forEach(c => { %>
                 <tr style="border-bottom:1px solid var(--border);">
-                  <td style="padding:12px 10px; font-weight:600;">
-                    <%= c.client_reference ? c.client_reference : 'Sans nom' %>
+                  <td style="padding:14px 10px; font-weight:700;">
+                    <%= c.client_reference ? c.client_reference : 'Client Général' %>
                   </td>
-                  <td style="padding:12px 10px;">
-                    <span class="code-box"><%= c.code %></span>
-                    <button class="btn-ghost small" onclick="navigator.clipboard.writeText('<%= c.code %>'); alert('Code copié : <%= c.code %>');" style="padding:2px 6px; margin-left:4px;">📋</button>
+                  <td style="padding:14px 10px;">
+                    <div style="display:inline-flex; align-items:center; gap:6px;">
+                      <span class="code-box"><%= c.code %></span>
+                      <button class="btn-ghost small" onclick="copyCode('<%= c.code %>')" title="Copier le code" style="padding:4px 8px; border-radius:6px; cursor:pointer;">📋</button>
+                    </div>
                   </td>
-                  <td style="padding:12px 10px;"><%= c.reseller_username ? c.reseller_username : 'Admin' %></td>
-                  <td style="padding:12px 10px;"><strong><%= c.consumed_data_gb.toFixed(2) %> Go</strong> / <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %></td>
-                  <td style="padding:12px 10px; font-family:monospace; color:var(--text-muted);"><%= c.allowed_hwids ? c.allowed_hwids : 'Non lié' %></td>
-                  <td style="padding:12px 10px;"><%= c.expiry_date ? c.expiry_date : 'Illimité' %></td>
-                  <td style="padding:12px 10px;">
+                  <td style="padding:14px 10px;"><%= c.reseller_username ? c.reseller_username : 'Administrateur' %></td>
+                  <td style="padding:14px 10px;">
+                    <span style="font-weight:700; color:#F8FAFC;"><%= c.consumed_data_gb.toFixed(2) %> Go</span>
+                    <span style="color:var(--text-muted); font-size:11px;">/ <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %></span>
+                  </td>
+                  <td style="padding:14px 10px; font-family:monospace; color:var(--text-muted); font-size:12px;">
+                    <%= c.allowed_hwids ? c.allowed_hwids : '🟢 Non verrouillé (1er appareil)' %>
+                  </td>
+                  <td style="padding:14px 10px;"><%= c.expiry_date ? c.expiry_date : 'Jamais' %></td>
+                  <td style="padding:14px 10px;">
                     <span class="badge badge-<%= c.status === 'active' ? 'success' : 'danger' %>"><%= c.status %></span>
                   </td>
-                  <td style="padding:12px 10px;">
-                    <form method="POST" action="/admin/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code ?');">
+                  <td style="padding:14px 10px; text-align:right;">
+                    <form method="POST" action="/admin/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code d\'accès ?');">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
                   </td>
@@ -192,153 +250,236 @@
     </div>
   </div>
 
-  <!-- Modal Envoyez Notification Broadcast -->
-  <div id="modalSendNotif" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
-    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:500px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-        <h3 style="margin:0; font-size:18px; color:#F59E0B;">🔔 Diffuser une Notification App</h3>
-        <button onclick="document.getElementById('modalSendNotif').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+  <!-- Toast Notification -->
+  <div id="toastMsg" class="toast-msg">📋 Code copié dans le presse-papier !</div>
+
+  <!-- MODAL 1: Notification Broadcast Admin -->
+  <div id="modalSendNotif" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="margin:0; font-size:18px; color:#F59E0B; font-weight:800;">🔔 Diffuser une Notification dans l'Application</h3>
+        <button onclick="closeModal('modalSendNotif')" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:20px;">✕</button>
       </div>
 
       <form method="POST" action="/admin/broadcast-notifications">
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Titre de la Notification</label>
-          <input type="text" name="title" required placeholder="ex: 📢 Nouveaux serveurs disponibles !" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        <div class="form-group">
+          <label>Titre de la Notification</label>
+          <input type="text" name="title" required placeholder="ex: 📢 Nouveaux serveurs ultra-rapides disponibles !" class="form-control" />
         </div>
 
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Message de la Notification</label>
-          <textarea name="message" rows="3" required placeholder="ex: De nouveaux serveurs VIP ont été ajoutés sur le réseau. Mettez à jour vos configs." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);"></textarea>
+        <div class="form-group">
+          <label>Message à afficher</label>
+          <textarea name="message" rows="3" required placeholder="ex: De nouveaux serveurs VIP ont été ajoutés. Mettez à jour vos configurations." class="form-control" style="resize:vertical;"></textarea>
         </div>
 
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">URL de redirection (Optionnel)</label>
-          <input type="text" name="url" placeholder="ex: https://wa.me/237676250509" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        <div class="form-group">
+          <label>Lien de redirection (Optionnel)</label>
+          <input type="text" name="url" placeholder="ex: https://wa.me/237676250509" class="form-control" />
         </div>
 
-        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-          <button type="button" class="btn-ghost" onclick="document.getElementById('modalSendNotif').style.display='none'">Annuler</button>
-          <button type="submit" class="btn-primary" style="background:#F59E0B;">Envoyer la Notification</button>
+        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
+          <button type="button" class="btn-ghost" onclick="closeModal('modalSendNotif')">Annuler</button>
+          <button type="submit" class="btn-primary" style="background:#F59E0B; border:none;">Diffuser la Notification</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal Ajouter Template/Inbound -->
-  <div id="modalAddTemplate" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
-    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:550px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-        <h3 style="margin:0; font-size:18px;">Nouveau Template / Inbound</h3>
-        <button onclick="document.getElementById('modalAddTemplate').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+  <!-- MODAL 2: Ajouter Serveur / Config Template -->
+  <div id="modalAddTemplate" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="margin:0; font-size:18px; font-weight:800;">Ajouter un Nouveau Serveur / Config</h3>
+        <button onclick="closeModal('modalAddTemplate')" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:20px;">✕</button>
       </div>
 
       <form method="POST" action="/admin/config-templates">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
-          <div>
-            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Nom du Serveur</label>
-            <input type="text" name="name" required placeholder="ex: France VIP - Cloudflare WS" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
-          </div>
-          <div>
-            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Protocole</label>
-            <select name="protocol" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);">
-              <option value="vless">VLESS (Xray)</option>
-              <option value="vmess">VMess (Xray)</option>
-              <option value="trojan">Trojan (Xray)</option>
-              <option value="slowdns">SlowDNS / DNSTT</option>
-              <option value="ssh">SSH Direct / Proxy</option>
+        <div class="form-group">
+          <label>Nom du Serveur / Profil</label>
+          <input type="text" name="name" required placeholder="ex: France VIP - Cloudflare WS" class="form-control" />
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="form-group">
+            <label>Protocole / Tunnel</label>
+            <select name="protocol" id="protoSelect" class="form-control" onchange="updateFormFields()">
+              <option value="vless">VLESS (Xray / 3X-UI)</option>
+              <option value="vmess">VMess (Xray / 3X-UI)</option>
+              <option value="trojan">Trojan (Xray / 3X-UI)</option>
+              <option value="ssh">SSH Direct / WebSocket Proxy</option>
               <option value="udp">UDP Custom</option>
+              <option value="slowdns">SlowDNS / DNSTT</option>
             </select>
           </div>
-        </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
-          <div>
-            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">IP Serveur</label>
-            <input type="text" name="server_ip" required placeholder="185.220.101.5" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
-          </div>
-          <div>
-            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Port</label>
-            <input type="number" name="server_port" value="443" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
-          </div>
-          <div>
-            <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">3X-UI Inbound ID</label>
-            <input type="number" name="xray_inbound_id" placeholder="ex: 1" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+          <div class="form-group">
+            <label>Adresse IP ou Domaine Serveur</label>
+            <input type="text" name="server_ip" required placeholder="ex: 185.220.101.5 ou vps.domain.com" class="form-control" />
           </div>
         </div>
 
-        <div style="margin-bottom:12px;">
-          <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px;">Payload / SNI (Optionnel)</label>
-          <input type="text" name="sni" placeholder="ex: cloudflare.com" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="form-group">
+            <label>Port du Serveur</label>
+            <input type="number" name="server_port" value="443" required class="form-control" />
+          </div>
+
+          <div class="form-group" id="sniGroup">
+            <label>SNI / BugHost (Host SSL)</label>
+            <input type="text" name="sni" placeholder="ex: m.facebook.com" class="form-control" />
+          </div>
         </div>
 
-        <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:12px;">
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
-            <input type="checkbox" name="is_global_premium" value="1" />
-            <span style="color:#22D3EE; font-weight:600;">Forcer sur TOUTES les configs Premium (Forcé pour tous les revendeurs)</span>
-          </label>
+        <div class="form-group" id="pathGroup">
+          <label>Chemin WS / Path (WebSocket / gRPC)</label>
+          <input type="text" name="path" placeholder="ex: /vless-ws" class="form-control" />
+        </div>
 
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
-            <input type="checkbox" name="is_base_config" value="1" checked />
-            <span>Inclus par défaut dans le JSON de base</span>
-          </label>
+        <div class="form-group" id="payloadGroup" style="display:none;">
+          <label>Payload Custom / En-têtes HTTP (SSH / Proxy)</label>
+          <input type="text" name="payload" placeholder="ex: GET / HTTP/1.1[crlf]Host: m.facebook.com[crlf]..." class="form-control" />
+        </div>
 
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
-            <input type="checkbox" name="is_customizable" value="1" checked />
-            <span>Personnalisable (Régénère un identifiant unique lors des codes)</span>
-          </label>
+        <div class="form-group">
+          <label>Plafond Data Spécifique du Serveur (Go)</label>
+          <input type="number" step="0.5" name="max_data_gb" value="0" class="form-control" />
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Laissez à 0 pour utiliser uniquement la limite globale du Code Premium client.</div>
+        </div>
 
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+        <!-- Section Repliable Avancée 3X-UI -->
+        <div style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+          <button type="button" onclick="toggleAdvanced3xui()" style="background:none; border:none; color:#7C5CFF; font-weight:700; font-size:12px; cursor:pointer; padding:0; display:flex; align-items:center; gap:6px;">
+            <span id="advIcon">▶</span> Paramètres Avancés 3X-UI / Xray (Optionnel)
+          </button>
+
+          <div id="adv3xuiArea" style="display:none; margin-top:12px; padding:12px; background:rgba(255,255,255,0.02); border-radius:10px; border:1px solid var(--border);">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>3X-UI Inbound ID (Identifiant de port Inbound)</label>
+              <input type="number" name="xray_inbound_id" placeholder="ex: 1, 2, 3..." class="form-control" />
+              <div class="help-box">
+                ℹ️ <b>Explication Inbound ID :</b> Si ce serveur est géré par un panneau 3X-UI sur votre VPS, indiquez le N° d'Inbound ID correspondant (ex: 1). Cela permet à l'API de créer automatiquement le client sur votre 3X-UI. Laissez vide si ce serveur est un serveur SSH / UDP classique.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Options de type d'accès & visibilité -->
+        <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:18px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">Type de Publication & Visibilité du Serveur</label>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+            <label style="display:flex; align-items:flex-start; gap:10px; padding:12px; background:rgba(124, 92, 255, 0.08); border:1px solid rgba(124, 92, 255, 0.25); border-radius:12px; cursor:pointer;">
+              <input type="radio" name="access_type" value="base" checked style="margin-top:3px;" onchange="toggleDefaultCreds()" />
+              <div>
+                <div style="font-weight:700; color:#C4B5FD; font-size:13px;">⭐ Serveur Gratuit de Base (Non-Premium)</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Visible et utilisable gratuitement par tous les utilisateurs de l'application (sans besoin de Code Premium).</div>
+              </div>
+            </label>
+
+            <label style="display:flex; align-items:flex-start; gap:10px; padding:12px; background:rgba(34, 211, 238, 0.08); border:1px solid rgba(34, 211, 238, 0.25); border-radius:12px; cursor:pointer;">
+              <input type="radio" name="access_type" value="global_premium" style="margin-top:3px;" onchange="toggleDefaultCreds()" />
+              <div>
+                <div style="font-weight:700; color:#22D3EE; font-size:13px;">👑 Serveur Global Premium Admin</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Inclus automatiquement dans TOUTES les clés Premium (Admin et Revendeurs) avec un identifiant unique par client.</div>
+              </div>
+            </label>
+
+            <label style="display:flex; align-items:flex-start; gap:10px; padding:12px; background:rgba(255, 255, 255, 0.03); border:1px solid var(--border); border-radius:12px; cursor:pointer;">
+              <input type="radio" name="access_type" value="reseller_option" style="margin-top:3px;" onchange="toggleDefaultCreds()" />
+              <div>
+                <div style="font-weight:700; color:#F8FAFC; font-size:13px;">📦 Serveur Optionnel Revendeur</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Proposé aux revendeurs comme serveur complémentaire qu'ils peuvent choisir de cocher lors de la création d'un code.</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Identifiants par défaut pour serveurs gratuits (visibles uniquement en mode gratuit) -->
+          <div id="defaultCredsGroup" style="display:block; padding:12px; background:rgba(255,255,255,0.02); border-radius:10px; border:1px solid var(--border); margin-bottom:14px;">
+            <div style="font-size:12px; font-weight:700; color:#C4B5FD; margin-bottom:8px;">🔑 Identifiants publics par défaut (Serveur Gratuit)</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label style="font-size:11px; color:var(--text-muted);">Utilisateur / UUID Public</label>
+                <input type="text" name="default_user" placeholder="ex: free_user" class="form-control" />
+              </div>
+              <div>
+                <label style="font-size:11px; color:var(--text-muted);">Mot de passe Public</label>
+                <input type="text" name="default_pass" placeholder="ex: free_pass" class="form-control" />
+              </div>
+            </div>
+          </div>
+
+          <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer;">
             <input type="checkbox" name="is_quota_counted" value="1" checked />
-            <span>Comptabilisé sur le Quota Revendeur (Décocher pour "Illimité Revendeur")</span>
+            <span>📊 Décompter du Quota de Data du Client (Décocher pour offrir du trafic gratuit illimité)</span>
           </label>
         </div>
 
-        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-          <button type="button" class="btn-ghost" onclick="document.getElementById('modalAddTemplate').style.display='none'">Annuler</button>
-          <button type="submit" class="btn-primary">Enregistrer Template</button>
+        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
+          <button type="button" class="btn-ghost" onclick="closeModal('modalAddTemplate')">Annuler</button>
+          <button type="submit" class="btn-primary" style="background:#7C5CFF; border:none;">Enregistrer le Serveur</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal Admin Générer Code -->
-  <div id="modalCreateCode" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:9999;">
-    <div style="background:var(--bg-card, #1E1E2E); border:1px solid var(--border, #2A2A3C); border-radius:16px; width:100%; max-width:500px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-        <h3 style="margin:0; font-size:18px;">Générer un Code d'Accès (Admin)</h3>
-        <button onclick="document.getElementById('modalCreateCode').style.display='none'" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px;">✕</button>
+  <!-- MODAL 3: Admin Générer Code Premium -->
+  <div id="modalCreateCode" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="margin:0; font-size:18px; font-weight:800;">Générer une Clé d'Accès Premium</h3>
+        <button onclick="closeModal('modalCreateCode')" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:20px;">✕</button>
       </div>
 
       <form method="POST" action="/admin/access-codes">
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">N° Téléphone / Nom du Client</label>
-          <input type="text" name="clientReference" placeholder="ex: +225 07080910 ou Client VIP 1" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        <div class="form-group">
+          <label>Référence Client / N° Téléphone</label>
+          <input type="text" name="clientReference" placeholder="ex: +225 07080910 ou Client VIP 1" class="form-control" />
         </div>
 
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Limite de Data (Go)</label>
-          <input type="number" step="0.5" name="maxDataGb" value="20" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="form-group">
+            <label>Enveloppe Data Globale (Go)</label>
+            <input type="number" step="0.5" name="maxDataGb" value="20" required class="form-control" />
+          </div>
+
+          <div class="form-group">
+            <label>Durée de Validité (Jours)</label>
+            <input type="number" name="expiryDays" value="30" required class="form-control" />
+          </div>
         </div>
 
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">Durée de Validité (Jours)</label>
-          <input type="number" name="expiryDays" value="30" required style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
+        <div class="form-group">
+          <label>HWID / Empreinte Appareil Client (Facultatif)</label>
+          <input type="text" name="hwid" placeholder="Ex: HWID-A1B2C3D4E5F6 (laisser vide pour lier au 1er appareil connecté)" class="form-control" />
         </div>
 
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; color:var(--text-muted); margin-bottom:6px;">HWID / Device ID Client (Facultatif)</label>
-          <input type="text" name="hwid" placeholder="Ex: A1B2C3D4E5F6" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);" />
-        </div>
-
-        <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-          <button type="button" class="btn-ghost" onclick="document.getElementById('modalCreateCode').style.display='none'">Annuler</button>
-          <button type="submit" class="btn-primary">Générer Code</button>
+        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
+          <button type="button" class="btn-ghost" onclick="closeModal('modalCreateCode')">Annuler</button>
+          <button type="submit" class="btn-primary" style="background:#22C55E; border:none;">Générer le Code</button>
         </div>
       </form>
     </div>
   </div>
 
   <script>
+    function openModal(id) {
+      document.getElementById(id).style.display = 'flex';
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    function copyCode(code) {
+      navigator.clipboard.writeText(code);
+      var toast = document.getElementById('toastMsg');
+      toast.innerText = '📋 Code ' + code + ' copié !';
+      toast.style.display = 'block';
+      setTimeout(function() {
+        toast.style.display = 'none';
+      }, 2500);
+    }
+
     function filterTable() {
       var input = document.getElementById('searchInput');
       var filter = input.value.toLowerCase();
@@ -347,13 +488,56 @@
 
       for (var i = 1; i < tr.length; i++) {
         var text = tr[i].textContent || tr[i].innerText;
-        if (text.toLowerCase().indexOf(filter) > -1) {
-          tr[i].style.display = '';
-        } else {
-          tr[i].style.display = 'none';
-        }
+        tr[i].style.display = (text.toLowerCase().indexOf(filter) > -1) ? '' : 'none';
       }
     }
+
+    function toggleAdvanced3xui() {
+      var area = document.getElementById('adv3xuiArea');
+      var icon = document.getElementById('advIcon');
+      if (area.style.display === 'none') {
+        area.style.display = 'block';
+        icon.innerText = '▼';
+      } else {
+        area.style.display = 'none';
+        icon.innerText = '▶';
+      }
+    }
+
+    function toggleDefaultCreds() {
+      var radios = document.getElementsByName('access_type');
+      var group = document.getElementById('defaultCredsGroup');
+      var selected = 'base';
+      for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) selected = radios[i].value;
+      }
+      group.style.display = (selected === 'base') ? 'block' : 'none';
+    }
+
+    function updateFormFields() {
+      var proto = document.getElementById('protoSelect').value;
+      var pathGroup = document.getElementById('pathGroup');
+      var payloadGroup = document.getElementById('payloadGroup');
+      var sniGroup = document.getElementById('sniGroup');
+
+      if (proto === 'vless' || proto === 'vmess' || proto === 'trojan') {
+        pathGroup.style.display = 'block';
+        payloadGroup.style.display = 'none';
+        sniGroup.style.display = 'block';
+      } else if (proto === 'ssh' || proto === 'udp') {
+        pathGroup.style.display = 'none';
+        payloadGroup.style.display = 'block';
+        sniGroup.style.display = 'block';
+      } else if (proto === 'slowdns') {
+        pathGroup.style.display = 'none';
+        payloadGroup.style.display = 'none';
+        sniGroup.style.display = 'block';
+      }
+      toggleDefaultCreds();
+    }
+
+    // Initialize fields on load
+    document.addEventListener('DOMContentLoaded', updateFormFields);
   </script>
 </body>
 </html>

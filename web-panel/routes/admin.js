@@ -175,21 +175,35 @@ router.get('/access-codes', (req, res) => {
 
 router.post('/config-templates', (req, res) => {
   try {
-    const { name, protocol, server_ip, server_port, xray_inbound_id, sni, is_base_config, is_customizable, is_quota_counted, is_global_premium } = req.body;
+    const { name, protocol, server_ip, server_port, xray_inbound_id, sni, path, payload, default_user, default_pass, access_type, is_customizable, is_quota_counted, max_data_gb } = req.body;
+
+    let is_base_config = 0;
+    let is_global_premium = 0;
+
+    if (access_type === 'base' || req.body.is_base_config === '1') {
+      is_base_config = 1;
+    } else if (access_type === 'global_premium' || req.body.is_global_premium === '1') {
+      is_global_premium = 1;
+    }
 
     db.prepare(`
       INSERT INTO config_templates (
-        name, protocol, server_ip, server_port, xray_inbound_id, sni,
-        is_base_config, is_customizable, is_quota_counted, is_global_premium
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, protocol, server_ip, server_port, xray_inbound_id, sni, path, payload, default_user, default_pass,
+        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, protocol, server_ip, parseInt(server_port, 10) || 443,
       xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
       sni || '',
-      is_base_config ? 1 : 0,
-      is_customizable ? 1 : 0,
-      is_quota_counted ? 1 : 0,
-      is_global_premium ? 1 : 0
+      path || '',
+      payload || '',
+      default_user || null,
+      default_pass || null,
+      is_base_config,
+      (is_customizable === '1' || access_type === 'global_premium' || access_type === 'reseller_option') ? 1 : 0,
+      is_quota_counted === '1' ? 1 : 0,
+      is_global_premium,
+      parseFloat(max_data_gb) || 0
     );
 
     audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
