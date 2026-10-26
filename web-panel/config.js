@@ -11,6 +11,7 @@ module.exports = {
   // Web server
   PORT: process.env.PORT || 3000,
   SESSION_SECRET: process.env.SESSION_SECRET || 'change-this-secret-in-.env',
+  APP_HMAC_SECRET: process.env.APP_HMAC_SECRET || 'NovaxSecretKey2026',
   DOMAIN: process.env.DOMAIN || '',
   PUBLIC_PORT: process.env.PUBLIC_PORT || '',
   // Set to "true" in .env when the panel sits behind Nginx/TLS (the deploy script does this

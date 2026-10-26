@@ -1,15 +1,55 @@
 const express = require('express');
+const crypto = require('crypto');
 const accessCodes = require('../lib/accessCodes');
 const db = require('../db/database');
 const cryptoLib = require('../lib/crypto');
+const config = require('../config');
 
 const router = express.Router();
 
 router.use(express.json());
 
+const APP_HMAC_SECRET = config.APP_HMAC_SECRET || process.env.APP_HMAC_SECRET || 'NovaxSecretKey2026';
+
+// Middleware de vérification de la signature HMAC-SHA256 de l'App NovaXTunnel
+function verifyAppSignature(req, res, next) {
+  const timestamp = req.headers['x-novax-timestamp'];
+  const signature = req.headers['x-novax-signature'];
+
+  // Si les en-têtes d'authentification de l'App sont présents, vérifier la signature HMAC-SHA256
+  if (timestamp && signature) {
+    const now = Date.now();
+    const reqTime = parseInt(timestamp, 10);
+    if (isNaN(reqTime) || Math.abs(now - reqTime) > 10 * 60 * 1000) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Accès refusé : Horodatage expiré.'
+      });
+    }
+
+    const path = req.originalUrl || req.path;
+    const dataToSign = `${timestamp}:${path}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', APP_HMAC_SECRET)
+      .update(dataToSign)
+      .digest('hex');
+
+    const sigBuffer = Buffer.from(signature, 'utf-8');
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+
+    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Accès refusé : Signature d\'application invalide.'
+      });
+    }
+  }
+
+  next();
+}
+
 // Public API endpoint for NovaXTunnel Android application
-// Accessible via https://nxtvpn.nostra.dpdns.org/api/v1/download-config
-router.post('/download-config', (req, res) => {
+router.post('/download-config', verifyAppSignature, (req, res) => {
   try {
     const { access_code, hwid } = req.body;
 
