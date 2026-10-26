@@ -4215,31 +4215,49 @@ install_slowdns() {
 
     echo -e "\n${C_GREEN}⚙️ Checking system architecture...${C_RESET}"
     local arch=$(uname -m)
-    local dnstt_url=""
+    local -a urls=()
 
     if [[ "$arch" == "x86_64" ]]; then
-        dnstt_url="https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-amd64"
         echo -e "${C_BLUE}ℹ️ Detected x86_64 (amd64) architecture.${C_RESET}"
+        urls=(
+            "https://dnstt.network/dnstt-server-linux-amd64"
+            "https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-amd64"
+            "https://raw.githubusercontent.com/beethovenn/slowdns/main/dnstt-server-linux-amd64"
+        )
     elif [[ "$arch" == "aarch64" || "$arch" == "arm64" ]]; then
-        dnstt_url="https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-arm64"
         echo -e "${C_BLUE}ℹ️ Detected ARM64 architecture.${C_RESET}"
+        urls=(
+            "https://dnstt.network/dnstt-server-linux-arm64"
+            "https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-arm64"
+            "https://raw.githubusercontent.com/beethovenn/slowdns/main/dnstt-server-linux-arm64"
+        )
     elif [[ "$arch" == "armv7l" || "$arch" == "arm" ]]; then
-        dnstt_url="https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-arm"
         echo -e "${C_BLUE}ℹ️ Detected ARM architecture.${C_RESET}"
+        urls=(
+            "https://github.com/juansso/slowdns/raw/main/dnstt-server-linux-arm"
+        )
     else
         echo -e "${C_RED}❌ Unsupported architecture: $arch${C_RESET}"
         return
     fi
 
     echo -e "\n${C_GREEN}📥 Downloading dnstt-server binary...${C_RESET}"
-    if ! wget -q --show-progress -O "$DNSTT_BIN" "$dnstt_url"; then
-        local fallback_url="https://raw.githubusercontent.com/beethovenn/slowdns/main/dnstt-server-linux-amd64"
-        [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && fallback_url="https://raw.githubusercontent.com/beethovenn/slowdns/main/dnstt-server-linux-arm64"
-        echo -e "${C_YELLOW}⚠️ Retrying with fallback mirror...${C_RESET}"
-        if ! wget -q --show-progress -O "$DNSTT_BIN" "$fallback_url"; then
-            echo -e "${C_RED}❌ Download failed. Check your internet connection.${C_RESET}"
-            return
+    local download_success=false
+    local url
+    for url in "${urls[@]}"; do
+        echo -e "${C_DIM}  - Trying mirror: ${url}${C_RESET}"
+        if curl -fsSL --connect-timeout 10 -o "$DNSTT_BIN" "$url" 2>/dev/null || wget -q --timeout=10 -O "$DNSTT_BIN" "$url" 2>/dev/null; then
+            if [ -s "$DNSTT_BIN" ]; then
+                download_success=true
+                echo -e "${C_GREEN}✅ Download successful from ${url}${C_RESET}"
+                break
+            fi
         fi
+    done
+
+    if [ "$download_success" != "true" ] || [ ! -s "$DNSTT_BIN" ]; then
+        echo -e "${C_RED}❌ Download failed. Check your VPS network connection.${C_RESET}"
+        return
     fi
     chmod +x "$DNSTT_BIN"
 
