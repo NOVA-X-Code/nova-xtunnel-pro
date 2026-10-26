@@ -3248,7 +3248,7 @@ frontend port_80_edge
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_payload payload(0,16) -m reg "^(GET|POST|OPTIONS|ACL|TRACE|CONNECT|PATCH|HEAD|PUT|DELETE|POLL|HTTP/)"
+    acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
@@ -3268,7 +3268,7 @@ frontend port_443_edge
     acl is_ssh payload(0,7) -m bin 5353482d322e30
     acl is_tls req.ssl_hello_type 1
     acl has_web_alpn req.ssl_alpn -m sub h2 http/1.1
-    acl is_payload payload(0,7) -m reg "^(GET|POST|OPTIONS|ACL|TRACE|CONNECT|PATCH|HEAD|PUT|DELETE|POLL|HTTP/)"
+    acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
@@ -3295,8 +3295,8 @@ frontend internal_decryptor
     # Once decrypted here that payload starts with an HTTP verb - without these rules it
     # fell through to nginx_cleartext (which just proxies to a web app), so the SSH
     # handshake never started. Send it to the same payload proxies the plain-text ports use.
-    acl is_connect payload(0,7) -m reg "^CONNECT"
-    acl is_payload payload(0,7) -m reg "^(GET|POST|OPTIONS|ACL|TRACE|CONNECT|PATCH|HEAD|PUT|DELETE|POLL|HTTP/)"
+    acl is_connect payload(0,7) -m sub CONNECT
+    acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
     tcp-request content accept if is_ssh
     tcp-request content accept if is_payload
     tcp-request content accept if HTTP
