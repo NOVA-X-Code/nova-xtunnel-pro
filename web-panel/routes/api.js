@@ -128,7 +128,7 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
     });
 
   } catch (e) {
-    return res.status(400).json({
+    return res.json({
       status: 'error',
       message: e.message
     });

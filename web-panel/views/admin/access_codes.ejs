@@ -141,6 +141,21 @@
   </style>
 </head>
 <body>
+  <%
+    // Helper function to render ISO country code as Unicode Flag Emoji
+    function getFlagEmoji(countryCode) {
+      if (!countryCode || countryCode.toLowerCase() === 'global') return '🌐';
+      const code = countryCode.toLowerCase().trim();
+      if (code === 'uk') return '🇬🇧';
+      if (code.length !== 2) return '🌐';
+      const codePoints = code
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt(0));
+      return String.fromCodePoint(...codePoints);
+    }
+  %>
+
   <%- include('../partials/sidebar') %>
 
   <div class="main-content">
@@ -199,12 +214,6 @@
             <input type="text" readonly value="http://<%= domain %>:3000/api/v1/download-config" class="form-control" style="font-family:monospace; color:#FBBF24; background:rgba(0,0,0,0.4);" id="apiEndpointInputHttp" />
             <button class="btn-ghost small" onclick="navigator.clipboard.writeText(document.getElementById('apiEndpointInputHttp').value); copyCode('URL HTTP');" style="padding:10px 14px; white-space:nowrap;">📋 Copier</button>
           </div>
-        </div>
-
-        <div style="margin-top:12px; padding:10px; background:rgba(245, 158, 11, 0.1); border:1px solid rgba(245, 158, 11, 0.3); border-radius:10px; font-size:11px; color:#FBBF24; line-height:1.4;">
-          💡 <b>Résolution Erreur Java CertPath dans l'App Android :</b><br/>
-          Sur votre VPS, exécutez la commande : <code>novaxpanel domain nxtvpn.nostra.dpdns.org</code><br/>
-          Elle régénère le certificat Let's Encrypt officiel (`fullchain.pem`).
         </div>
       </div>
 
@@ -300,7 +309,7 @@
               <% templates.forEach(t => { %>
                 <tr style="border-bottom:1px solid var(--border);">
                   <td style="padding:16px 10px; font-weight:800; color:#F8FAFC;">
-                    <span style="font-size:16px; margin-right:6px;"><%= t.flag === 'fr' ? '🇫🇷' : (t.flag === 'cm' ? '🇨🇲' : (t.flag === 'ci' ? '🇨🇮' : (t.flag === 'us' ? '🇺🇸' : (t.flag === 'de' ? '🇩🇪' : (t.flag === 'ca' ? '🇨🇦' : '🌐'))))) %></span>
+                    <span style="font-size:18px; margin-right:8px;"><%= getFlagEmoji(t.flag) %></span>
                     <%= t.name %>
                     <% if (t.info) { %><div style="font-size:11px; color:#94A3B8; font-weight:normal;"><%= t.info %></div><% } %>
                   </td>
@@ -449,7 +458,7 @@
     </div>
   </div>
 
-  <!-- MODAL 2: Ajouter Mode / Config Template (Exact App Modes) -->
+  <!-- MODAL 2: Ajouter Mode / Config Template -->
   <div id="modalAddTemplate" class="modal-overlay">
     <div class="modal-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
@@ -461,7 +470,7 @@
       </div>
 
       <form method="POST" action="/admin/config-templates">
-        <!-- MODE SELECTOR CARDS (Exact JSON Types) -->
+        <!-- MODE SELECTOR CARDS -->
         <label style="font-size:12px; font-weight:700; color:#94A3B8; text-transform:uppercase; margin-bottom:8px; display:block;">1. Choisissez le Mode de Connexion App (`TYPE`)</label>
         <div class="mode-card-grid">
           <div class="mode-card selected" onclick="selectMode('SSH_DIRECT', '22')" id="mode_SSH_DIRECT">
@@ -544,9 +553,37 @@
               <option value="fr">🇫🇷 France (fr)</option>
               <option value="cm">🇨🇲 Cameroun (cm)</option>
               <option value="ci">🇨🇮 Côte d'Ivoire (ci)</option>
-              <option value="us">🇺🇸 USA (us)</option>
-              <option value="de">🇩🇪 Allemagne (de)</option>
+              <option value="sn">🇸🇳 Sénégal (sn)</option>
+              <option value="ga">🇬🇦 Gabon (ga)</option>
+              <option value="ml">🇲🇱 Mali (ml)</option>
+              <option value="bf">🇧🇫 Burkina Faso (bf)</option>
+              <option value="gn">🇬🇳 Guinée (gn)</option>
+              <option value="tg">🇹🇬 Togo (tg)</option>
+              <option value="bj">🇧🇯 Bénin (bj)</option>
+              <option value="cd">🇨🇩 RDC Congo (cd)</option>
+              <option value="cg">🇨🇬 Congo (cg)</option>
+              <option value="ma">🇲🇦 Maroc (ma)</option>
+              <option value="dz">🇩🇿 Algérie (dz)</option>
+              <option value="tn">🇹🇳 Tunisie (tn)</option>
+              <option value="ng">🇳🇬 Nigeria (ng)</option>
+              <option value="gh">🇬🇭 Ghana (gh)</option>
+              <option value="za">🇿🇦 Afrique du Sud (za)</option>
+              <option value="us">🇺🇸 États-Unis (us)</option>
               <option value="ca">🇨🇦 Canada (ca)</option>
+              <option value="gb">🇬🇧 Royaume-Uni (gb)</option>
+              <option value="de">🇩🇪 Allemagne (de)</option>
+              <option value="nl">🇳🇱 Pays-Bas (nl)</option>
+              <option value="es">🇪🇸 Espagne (es)</option>
+              <option value="it">🇮🇹 Italie (it)</option>
+              <option value="ch">🇨🇭 Suisse (ch)</option>
+              <option value="be">🇧🇪 Belgique (be)</option>
+              <option value="se">🇸🇪 Suède (se)</option>
+              <option value="sg">🇸🇬 Singapour (sg)</option>
+              <option value="jp">🇯🇵 Japon (jp)</option>
+              <option value="in">🇮🇳 Inde (in)</option>
+              <option value="br">🇧🇷 Brésil (br)</option>
+              <option value="au">🇦🇺 Australie (au)</option>
+              <option value="global">🌐 Global / Mondial (global)</option>
             </select>
           </div>
         </div>
@@ -670,6 +707,11 @@
             </div>
           </div>
 
+          <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer; margin-bottom:10px;">
+            <input type="checkbox" name="is_customizable" value="1" />
+            <span>✏️ Champs Personnalisables dans l'App (`isCustomizable: true`) — Permet à l'utilisateur dans l'App de modifier/saisir ses propres Payload, SNI, Proxy ou Clés DNS</span>
+          </label>
+
           <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer;">
             <input type="checkbox" name="is_quota_counted" value="1" checked />
             <span>📊 Décompter du Quota de Data du Client (Décocher pour offrir du trafic gratuit illimité)</span>
@@ -711,9 +753,37 @@
               <option value="fr">🇫🇷 France (fr)</option>
               <option value="cm">🇨🇲 Cameroun (cm)</option>
               <option value="ci">🇨🇮 Côte d'Ivoire (ci)</option>
-              <option value="us">🇺🇸 USA (us)</option>
-              <option value="de">🇩🇪 Allemagne (de)</option>
+              <option value="sn">🇸🇳 Sénégal (sn)</option>
+              <option value="ga">🇬🇦 Gabon (ga)</option>
+              <option value="ml">🇲🇱 Mali (ml)</option>
+              <option value="bf">🇧🇫 Burkina Faso (bf)</option>
+              <option value="gn">🇬🇳 Guinée (gn)</option>
+              <option value="tg">🇹🇬 Togo (tg)</option>
+              <option value="bj">🇧🇯 Bénin (bj)</option>
+              <option value="cd">🇨🇩 RDC Congo (cd)</option>
+              <option value="cg">🇨🇬 Congo (cg)</option>
+              <option value="ma">🇲🇦 Maroc (ma)</option>
+              <option value="dz">🇩🇿 Algérie (dz)</option>
+              <option value="tn">🇹🇳 Tunisie (tn)</option>
+              <option value="ng">🇳🇬 Nigeria (ng)</option>
+              <option value="gh">🇬🇭 Ghana (gh)</option>
+              <option value="za">🇿🇦 Afrique du Sud (za)</option>
+              <option value="us">🇺🇸 États-Unis (us)</option>
               <option value="ca">🇨🇦 Canada (ca)</option>
+              <option value="gb">🇬🇧 Royaume-Uni (gb)</option>
+              <option value="de">🇩🇪 Allemagne (de)</option>
+              <option value="nl">🇳🇱 Pays-Bas (nl)</option>
+              <option value="es">🇪🇸 Espagne (es)</option>
+              <option value="it">🇮🇹 Italie (it)</option>
+              <option value="ch">🇨🇭 Suisse (ch)</option>
+              <option value="be">🇧🇪 Belgique (be)</option>
+              <option value="se">🇸🇪 Suède (se)</option>
+              <option value="sg">🇸🇬 Singapour (sg)</option>
+              <option value="jp">🇯🇵 Japon (jp)</option>
+              <option value="in">🇮🇳 Inde (in)</option>
+              <option value="br">🇧🇷 Brésil (br)</option>
+              <option value="au">🇦🇺 Australie (au)</option>
+              <option value="global">🌐 Global / Mondial (global)</option>
             </select>
           </div>
         </div>
@@ -789,6 +859,13 @@
             <label>Serveur DNS (`DNS`)</label>
             <input type="text" name="dns_server" id="editDnsServer" class="form-control" />
           </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:18px;">
+          <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer; margin-bottom:10px;">
+            <input type="checkbox" name="is_customizable" id="editIsCustomizable" value="1" />
+            <span>🔑 Serveur Personnalisable (`isCustomizable: true`) — Génère des identifiants/clés uniques par client Premium</span>
+          </label>
         </div>
 
         <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
@@ -958,6 +1035,7 @@
       document.getElementById('editNameserver').value = t.nameserver || '';
       document.getElementById('editDnsServer').value = t.dns_server || '8.8.8.8';
       document.getElementById('editMaxDataGb').value = t.max_data_gb || 0;
+      document.getElementById('editIsCustomizable').checked = (t.is_customizable === 1);
 
       openModal('modalEditTemplate');
     }

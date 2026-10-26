@@ -50,6 +50,13 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
   // Deduplicate templates by ID
   const map = new Map();
   [...baseTemplates, ...globalTemplates, ...extraTemplates].forEach(t => map.set(t.id, t));
+
+  // If no templates were found via base/global/extra, fallback to all available templates
+  if (map.size === 0) {
+    const fallbackTemplates = db.prepare('SELECT * FROM config_templates').all();
+    fallbackTemplates.forEach(t => map.set(t.id, t));
+  }
+
   const allTemplates = Array.from(map.values());
 
   // Generate unified master credentials for this access code:
@@ -86,7 +93,9 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
 }
 
 function getAccessCodeDetails(codeStr) {
-  const codeRow = db.prepare('SELECT * FROM access_codes WHERE code = ?').get(codeStr.trim());
+  if (!codeStr) return null;
+  const cleanCode = codeStr.trim().toUpperCase();
+  const codeRow = db.prepare('SELECT * FROM access_codes WHERE UPPER(code) = ?').get(cleanCode);
   if (!codeRow) return null;
 
   const creds = db.prepare(`
