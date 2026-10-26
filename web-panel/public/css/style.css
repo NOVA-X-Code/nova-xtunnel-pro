@@ -110,7 +110,7 @@ a { color: var(--cyan); text-decoration: none; }
 
 /* Room for the now fixed-position sidebar (desktop only - the <860px media query below
    switches .sidebar back to an off-canvas drawer, so .main shouldn't reserve space then). */
-.main { flex: 1; padding: 32px 40px; max-width: 1180px; width: 100%; margin-left: 240px; }
+.main, .main-content { flex: 1; padding: 32px 40px; max-width: 1280px; width: 100%; margin-left: 240px; box-sizing: border-box; }
 
 .topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 26px; padding-bottom: 20px; border-bottom: 1px solid var(--border-soft); gap: 16px; flex-wrap: wrap; }
 .page-title { font-size: 23px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
@@ -354,7 +354,7 @@ form.inline { display: inline; }
     padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
     position: sticky; top: 0; z-index: 20;
   }
-  .main { padding: 20px 16px; margin-left: 0; }
+  .main, .main-content { padding: 20px 16px; margin-left: 0; width: 100%; }
   body { background-attachment: scroll; } /* background-attachment: fixed is buggy/janky on mobile Safari */
   .stat-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .panel { padding: 16px; }

@@ -184,9 +184,27 @@
           <span class="badge badge-blue">API v1</span>
         </div>
         <p style="font-size:12px; color:#94A3B8; margin:0 0 10px 0;">URL configurée dans votre application Android pour télécharger les serveurs et valider les clés :</p>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <input type="text" readonly value="https://<%= domain %>/api/v1/download-config" class="form-control" style="font-family:monospace; color:#38BDF8; background:rgba(0,0,0,0.4);" id="apiEndpointInput" />
-          <button class="btn-ghost small" onclick="navigator.clipboard.writeText(document.getElementById('apiEndpointInput').value); copyCode('URL API');" style="padding:10px 14px; white-space:nowrap;">📋 Copier</button>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px; color:#38BDF8; font-weight:700; margin-bottom:4px; display:block;">1. URL HTTPS (SSL Let's Encrypt Officiel) :</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" readonly value="https://<%= domain %>/api/v1/download-config" class="form-control" style="font-family:monospace; color:#38BDF8; background:rgba(0,0,0,0.4);" id="apiEndpointInput" />
+            <button class="btn-ghost small" onclick="navigator.clipboard.writeText(document.getElementById('apiEndpointInput').value); copyCode('URL HTTPS');" style="padding:10px 14px; white-space:nowrap;">📋 Copier</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:11px; color:#FBBF24; font-weight:700; margin-bottom:4px; display:block;">2. URL HTTP Direct (Secours sans SSL) :</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" readonly value="http://<%= domain %>:3000/api/v1/download-config" class="form-control" style="font-family:monospace; color:#FBBF24; background:rgba(0,0,0,0.4);" id="apiEndpointInputHttp" />
+            <button class="btn-ghost small" onclick="navigator.clipboard.writeText(document.getElementById('apiEndpointInputHttp').value); copyCode('URL HTTP');" style="padding:10px 14px; white-space:nowrap;">📋 Copier</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px; padding:10px; background:rgba(245, 158, 11, 0.1); border:1px solid rgba(245, 158, 11, 0.3); border-radius:10px; font-size:11px; color:#FBBF24; line-height:1.4;">
+          💡 <b>Résolution Erreur Java CertPath dans l'App Android :</b><br/>
+          Sur votre VPS, exécutez la commande : <code>novaxpanel domain nxtvpn.nostra.dpdns.org</code><br/>
+          Elle régénère le certificat Let's Encrypt officiel (`fullchain.pem`).
         </div>
       </div>
 
