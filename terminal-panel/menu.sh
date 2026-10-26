@@ -2524,7 +2524,11 @@ obtain_certbot_edge_cert() {
     }
 
     echo -e "\n${C_BLUE}🚀 Requesting a Certbot certificate for ${C_YELLOW}$domain_name${C_RESET}"
-    certbot certonly --standalone -d "$domain_name" --non-interactive --agree-tos -m "$email"
+    if [ -n "$email" ]; then
+        certbot certonly --standalone -d "$domain_name" --non-interactive --agree-tos -m "$email"
+    else
+        certbot certonly --standalone -d "$domain_name" --non-interactive --agree-tos --register-unsafely-without-email
+    fi
     if [ $? -ne 0 ]; then
         echo -e "\n${C_RED}❌ Certbot failed to obtain a certificate.${C_RESET}"
         echo -e "${C_YELLOW}ℹ️ Make sure the domain points to this server and port 80 is reachable.${C_RESET}"
@@ -6435,6 +6439,11 @@ if [[ "$1" == "--exec" ]]; then
     shift
     action="$1"
     case "$action" in
+        certbot_setup|certbot_domain)
+            shift
+            obtain_certbot_edge_cert "$1" "$2"
+            exit $?
+            ;;
         install_badvpn|uninstall_badvpn|\
         install_udp_custom|uninstall_udp_custom|\
         install_ssl_tunnel|uninstall_ssl_tunnel|\
