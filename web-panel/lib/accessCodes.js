@@ -90,7 +90,7 @@ function getAccessCodeDetails(codeStr) {
   if (!codeRow) return null;
 
   const creds = db.prepare(`
-    SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.payload, ct.sni, ct.path, ct.is_customizable, ct.is_quota_counted
+    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.is_customizable, ct.is_quota_counted, ct.max_data_gb AS template_max_data_gb
     FROM code_credentials cc
     JOIN config_templates ct ON cc.config_template_id = ct.id
     WHERE cc.access_code_id = ?
@@ -137,38 +137,54 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   }
 
   const servers = [];
+  const config = require('../config');
+  const fs = require('fs');
+
+  function readShellVarsLocal(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) return {};
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const result = {};
+    for (const line of content.split('\n')) {
+      const match = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*["']?(.*?)["']?\s*$/);
+      if (match) result[match[1]] = match[2];
+    }
+    return result;
+  }
+
   for (const c of accessCode.credentials) {
     const serverObj = {
       Name: c.name,
+      Info: c.info || '',
+      Flag: c.flag || 'fr',
       TYPE: c.protocol.toUpperCase(),
       ServerIP: c.server_ip,
       ServerPort: c.server_port,
       USER: c.client_uuid_or_user,
       PASS: c.client_password || '',
-      isCustomizable: c.is_customizable === 1,
-      Payload: c.payload || '',
-      SSLHost: c.sni || ''
+      isCustomizable: c.is_customizable === 1
     };
 
-    if (c.protocol === 'vless' || c.protocol === 'vmess' || c.protocol === 'trojan') {
-      const v2JsonObj = {
-        inbounds: [],
-        outbounds: [{
-          protocol: c.protocol,
-          settings: {
-            vnext: [{
-              address: c.server_ip,
-              port: c.server_port,
-              users: [{ id: c.client_uuid_or_user, encryption: "none" }]
-            }]
-          },
-          streamSettings: {
-            network: c.path ? "ws" : "tcp",
-            wsSettings: c.path ? { path: c.path } : undefined
-          }
-        }]
-      };
-      serverObj.v2rayJson = JSON.stringify(v2JsonObj);
+    if (c.proxy_ip) serverObj.ProxyIP = c.proxy_ip;
+    if (c.proxy_port) serverObj.ProxyPort = c.proxy_port;
+    if (c.payload) serverObj.Payload = c.payload;
+    if (c.sni) serverObj.SSLHost = c.sni;
+
+    // SlowDNS fields
+    if (c.protocol.toUpperCase().includes('SLOWDNS')) {
+      const dnsttInfo = readShellVarsLocal(config.DNSTT_CONFIG_FILE);
+      serverObj.PublicKey = c.public_key || dnsttInfo.PUBLIC_KEY || '';
+      serverObj.NAMESERVER = c.nameserver || dnsttInfo.TUNNEL_DOMAIN || c.sni || '';
+      serverObj.DNS = c.dns_server || '8.8.8.8';
+    }
+
+    // XRAY modes (v2rayLink)
+    if (c.protocol.toUpperCase().startsWith('XRAY_') || c.protocol === 'vless' || c.protocol === 'vmess' || c.protocol === 'trojan') {
+      let rawLink = c.v2ray_link || '';
+      if (c.is_customizable === 1 && rawLink) {
+        // Replace UUID placeholder inside v2rayLink with client's master UUID
+        rawLink = rawLink.replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/, c.client_uuid_or_user);
+      }
+      serverObj.v2rayLink = rawLink;
     }
 
     servers.push(serverObj);

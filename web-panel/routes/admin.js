@@ -175,7 +175,7 @@ router.get('/access-codes', (req, res) => {
 
 router.post('/config-templates', (req, res) => {
   try {
-    const { name, protocol, server_ip, server_port, xray_inbound_id, sni, path, payload, default_user, default_pass, access_type, is_customizable, is_quota_counted, max_data_gb } = req.body;
+    const { name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass, access_type, is_customizable, is_quota_counted, max_data_gb } = req.body;
 
     let is_base_config = 0;
     let is_global_premium = 0;
@@ -188,15 +188,26 @@ router.post('/config-templates', (req, res) => {
 
     db.prepare(`
       INSERT INTO config_templates (
-        name, protocol, server_ip, server_port, xray_inbound_id, sni, path, payload, default_user, default_pass,
+        name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass,
         is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      name, protocol, server_ip, parseInt(server_port, 10) || 443,
-      xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
-      sni || '',
-      path || '',
+      name,
+      info || '',
+      flag || 'fr',
+      protocol,
+      server_ip || '',
+      parseInt(server_port, 10) || 443,
+      proxy_ip || '',
+      parseInt(proxy_port, 10) || 8080,
       payload || '',
+      sni || '',
+      v2ray_link || '',
+      public_key || '',
+      nameserver || '',
+      dns_server || '8.8.8.8',
+      xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
+      path || '',
       default_user || null,
       default_pass || null,
       is_base_config,

@@ -17,17 +17,28 @@ router.post('/download-config', (req, res) => {
     if (!access_code || access_code.trim().length === 0 || access_code.trim().toUpperCase() === 'DEFAULT' || access_code.trim().toUpperCase() === 'FREE') {
       const baseTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 1').all();
 
-      const servers = baseTemplates.map(t => ({
-        Name: t.name,
-        TYPE: t.protocol.toUpperCase(),
-        ServerIP: t.server_ip,
-        ServerPort: t.server_port,
-        USER: t.default_user || 'free_user',
-        PASS: t.default_pass || 'free_pass',
-        isCustomizable: t.is_customizable === 1,
-        Payload: t.payload || '',
-        SSLHost: t.sni || ''
-      }));
+      const servers = baseTemplates.map(t => {
+        const s = {
+          Name: t.name,
+          Info: t.info || '',
+          Flag: t.flag || 'fr',
+          TYPE: t.protocol.toUpperCase(),
+          ServerIP: t.server_ip,
+          ServerPort: t.server_port,
+          USER: t.default_user || 'free_user',
+          PASS: t.default_pass || 'free_pass',
+          isCustomizable: t.is_customizable === 1
+        };
+        if (t.proxy_ip) s.ProxyIP = t.proxy_ip;
+        if (t.proxy_port) s.ProxyPort = t.proxy_port;
+        if (t.payload) s.Payload = t.payload;
+        if (t.sni) s.SSLHost = t.sni;
+        if (t.v2ray_link) s.v2rayLink = t.v2ray_link;
+        if (t.public_key) s.PublicKey = t.public_key;
+        if (t.nameserver) s.NAMESERVER = t.nameserver;
+        if (t.dns_server) s.DNS = t.dns_server;
+        return s;
+      });
 
       const activeNotif = db.prepare('SELECT * FROM broadcast_notifications WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
 
