@@ -296,13 +296,6 @@ router.post('/app-settings', (req, res) => {
   }
 });
 
-    audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
-  } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
-  }
-});
-
 router.post('/config-templates/:id/delete', (req, res) => {
   try {
     db.prepare('DELETE FROM config_templates WHERE id = ?').run(req.params.id);
