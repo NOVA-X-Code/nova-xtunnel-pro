@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS config_templates (
   is_customizable INTEGER DEFAULT 1,     -- 1 = Re-generated with unique premium credentials for Access Codes
   is_quota_counted INTEGER DEFAULT 1,    -- 1 = Counted against reseller quota, 0 = Unlimited/Free for reseller
   is_global_premium INTEGER DEFAULT 0,   -- 1 = Forced on ALL premium access codes for all resellers
+  max_data_gb REAL DEFAULT 0,            -- 0 = Unlimited / Uses global access code limit
 
   payload TEXT,
   sni TEXT,
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS config_templates (
 CREATE TABLE IF NOT EXISTS access_codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   reseller_id INTEGER REFERENCES resellers(id) ON DELETE SET NULL,
-  code TEXT UNIQUE NOT NULL,             -- ex: "NXT-98A2-33F1"
+  code TEXT UNIQUE NOT NULL,             -- ex: "NOVA-98A2-33F1"
   client_reference TEXT DEFAULT '',      -- Phone number or client name (e.g. "+225 07080910")
   max_data_gb REAL DEFAULT 10.0,         -- Max data limit in GB (0 = unlimited)
   consumed_data_gb REAL DEFAULT 0.0,     -- Consumed data in GB
@@ -82,11 +83,6 @@ CREATE TABLE IF NOT EXISTS access_codes (
   status TEXT DEFAULT 'active',          -- 'active' | 'expired' | 'depleted' | 'locked'
   created_at TEXT DEFAULT (datetime('now'))
 );
-
-try { db.exec('ALTER TABLE config_templates ADD COLUMN is_global_premium INTEGER DEFAULT 0'); } catch (e) {}
-try { db.exec('ALTER TABLE access_codes ADD COLUMN client_reference TEXT DEFAULT ""'); } catch (e) {}
-try { db.exec('ALTER TABLE access_codes ADD COLUMN expiry_days INTEGER DEFAULT 30'); } catch (e) {}
-try { db.exec('ALTER TABLE access_codes ADD COLUMN activated_at TEXT DEFAULT NULL'); } catch (e) {}
 
 CREATE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
 
@@ -110,27 +106,6 @@ CREATE TABLE IF NOT EXISTS broadcast_notifications (
   is_active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
-`);
-
-// Migration: older databases were created before this column existed. SQLite has no
-// "ADD COLUMN IF NOT EXISTS", so we just try and ignore the error when it's already there.
-try {
-  db.exec('ALTER TABLE clients ADD COLUMN usage_at_deletion_gb REAL');
-} catch (e) {
-  if (!/duplicate column/i.test(e.message)) throw e;
-}
-
-// quota_reset_offset_gb lets an admin "reset the reseller's displayed consumed total to 0"
-// as a pure display action (like zeroing an odometer trip counter) WITHOUT touching any
-// client's own live usage or the historical consumed_quota_gb banked from deleted/reset
-// clients. See lib/quota.js getResellerStats() for how it's subtracted back out.
-try {
-  db.exec('ALTER TABLE resellers ADD COLUMN quota_reset_offset_gb REAL DEFAULT 0');
-} catch (e) {
-  if (!/duplicate column/i.test(e.message)) throw e;
-}
-
-db.exec(`
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,6 +119,25 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_reseller ON audit_log(reseller_id);
 `);
+
+// Migrations / ALTER TABLE statements (outside db.exec SQL string):
+try { db.exec('ALTER TABLE config_templates ADD COLUMN is_global_premium INTEGER DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE config_templates ADD COLUMN max_data_gb REAL DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN client_reference TEXT DEFAULT ""'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN expiry_days INTEGER DEFAULT 30'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN activated_at TEXT DEFAULT NULL'); } catch (e) {}
+
+try {
+  db.exec('ALTER TABLE clients ADD COLUMN usage_at_deletion_gb REAL');
+} catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+
+try {
+  db.exec('ALTER TABLE resellers ADD COLUMN quota_reset_offset_gb REAL DEFAULT 0');
+} catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
 
 // Bootstrap a default admin account on first run only.
 const adminCount = db.prepare('SELECT COUNT(*) AS c FROM admins').get().c;
