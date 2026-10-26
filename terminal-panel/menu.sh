@@ -4292,12 +4292,86 @@ install_slowdns() {
             ;;
     esac
 
-    echo -e "\n${C_YELLOW}🌐 SlowDNS Nameserver Setup${C_RESET}"
-    read -p "👉 Enter your NS / Subdomain (e.g. ns.yourdomain.com): " ns_domain
-    if [[ -z "$ns_domain" ]]; then
-        echo -e "${C_RED}❌ Nameserver domain cannot be empty.${C_RESET}"
-        rm -f "$DNSTT_BIN"
-        return
+    echo -e "\n${C_YELLOW}🌐 SlowDNS Domain Setup${C_RESET}"
+    read -p "👉 Auto-generate DNS records or use custom ones? (auto/custom) [auto]: " dns_choice
+    dns_choice=${dns_choice:-auto}
+
+    local ns_domain=""
+    local tunnel_domain=""
+    local mtu_string=""
+
+    if [[ "$dns_choice" == "custom" ]]; then
+        read -p "👉 Enter your full Nameserver domain (e.g., ns1.yourdomain.com): " ns_domain
+        if [[ -z "$ns_domain" ]]; then
+            echo -e "${C_RED}❌ Nameserver domain cannot be empty.${C_RESET}"
+            rm -f "$DNSTT_BIN"
+            return
+        fi
+
+        read -p "👉 Enter your full Tunnel domain (e.g., tun.yourdomain.com): " tunnel_domain
+        if [[ -z "$tunnel_domain" ]]; then
+            tunnel_domain="$ns_domain"
+        fi
+    else
+        echo -e "\n${C_BLUE}⚙️ Auto-configuring DNS records via deSEC...${C_RESET}"
+        local SERVER_IPV4
+        SERVER_IPV4=$(curl -s -4 --max-time 10 icanhazip.com)
+
+        if ! _is_valid_ipv4 "$SERVER_IPV4"; then
+            echo -e "${C_RED}❌ Could not retrieve a valid public IPv4 address.${C_RESET}"
+            rm -f "$DNSTT_BIN"
+            return
+        fi
+
+        local SERVER_IPV6
+        SERVER_IPV6=$(curl -s -6 --max-time 5 icanhazip.com 2>/dev/null || true)
+
+        local RANDOM_STR
+        RANDOM_STR=$(tr -dc a-z0-9 </dev/urandom | head -c 6)
+
+        local ns_sub="ns-${RANDOM_STR}"
+        local tun_sub="tun-${RANDOM_STR}"
+
+        ns_domain="${ns_sub}.${DESEC_DOMAIN}"
+        tunnel_domain="${tun_sub}.${DESEC_DOMAIN}"
+
+        local API_DATA
+        API_DATA=$(printf \
+            '[{"subname":"%s","type":"A","ttl":3600,"records":["%s"]},{"subname":"%s","type":"NS","ttl":3600,"records":["%s."]}]' \
+            "$ns_sub" "$SERVER_IPV4" "$tun_sub" "$ns_domain")
+
+        if [[ -n "$SERVER_IPV6" ]]; then
+            API_DATA="${API_DATA%]}"
+            API_DATA="${API_DATA},$(printf '{"subname":"%s","type":"AAAA","ttl":3600,"records":["%s"]}' "$ns_sub" "$SERVER_IPV6")]"
+        fi
+
+        local CREATE_RESPONSE
+        CREATE_RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+            "https://desec.io/api/v1/domains/${DESEC_DOMAIN}/rrsets/" \
+            -H "Authorization: Token ${DESEC_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "$API_DATA")
+
+        local HTTP_CODE="${CREATE_RESPONSE: -3}"
+        if [[ "$HTTP_CODE" != "201" ]]; then
+            echo -e "${C_YELLOW}⚠️ Could not auto-register deSEC records (HTTP $HTTP_CODE). Switching to custom domain entry.${C_RESET}"
+            read -p "👉 Enter your full Nameserver domain (e.g., ns1.yourdomain.com): " ns_domain
+            read -p "👉 Enter your full Tunnel domain (e.g., tun.yourdomain.com): " tunnel_domain
+            if [[ -z "$ns_domain" ]]; then
+                echo -e "${C_RED}❌ Domain cannot be empty.${C_RESET}"
+                rm -f "$DNSTT_BIN"
+                return
+            fi
+            [[ -z "$tunnel_domain" ]] && tunnel_domain="$ns_domain"
+        else
+            echo -e "${C_GREEN}✅ DNS records auto-created: ${C_YELLOW}${tunnel_domain}${C_RESET} (NS) -> ${C_YELLOW}${ns_domain}${C_RESET} (A)"
+        fi
+    fi
+
+    # MTU Prompt
+    read -p "👉 Enter MTU value (e.g., 512, 1200) or press [Enter] for default: " mtu_val
+    if [[ "$mtu_val" =~ ^[0-9]+$ ]]; then
+        mtu_string=" -mtu ${mtu_val}"
     fi
 
     echo -e "\n${C_GREEN}🔐 Generating key pair for DNSTT...${C_RESET}"
@@ -4314,7 +4388,8 @@ install_slowdns() {
     pub_key=$(cat "$DNSTT_PUB_FILE" 2>/dev/null | tr -d ' \n\r')
 
     cat > "$DNSTT_INFO_FILE" <<EOF
-TUNNEL_DOMAIN="$ns_domain"
+NS_DOMAIN="$ns_domain"
+TUNNEL_DOMAIN="$tunnel_domain"
 PUBLIC_KEY="$pub_key"
 FORWARD_TARGET="$target_addr"
 FORWARD_DESC="$forward_desc"
@@ -4329,7 +4404,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=$DNSTT_BIN -udp :$DNSTT_LISTEN_PORT -privkey-file $DNSTT_KEY_FILE $ns_domain $target_addr
+ExecStart=$DNSTT_BIN -udp :$DNSTT_LISTEN_PORT${mtu_string} -privkey-file $DNSTT_KEY_FILE $tunnel_domain $target_addr
 Restart=always
 RestartSec=3
 
@@ -4355,6 +4430,7 @@ EOF
     if systemctl is-active --quiet dnstt.service; then
         echo -e "\n${C_GREEN}✅ SlowDNS (DNSTT) Installed Successfully!${C_RESET}"
         echo -e "   - Nameserver (NS): ${C_YELLOW}${ns_domain}${C_RESET}"
+        echo -e "   - Tunnel Domain  : ${C_YELLOW}${tunnel_domain}${C_RESET}"
         echo -e "   - Public Key     : ${C_YELLOW}${pub_key}${C_RESET}"
         echo -e "   - Mode / Target  : ${C_YELLOW}${forward_desc}${C_RESET} (${target_addr})"
         echo -e "   - Public Port    : ${C_YELLOW}53 UDP${C_RESET} (redirected to ${DNSTT_LISTEN_PORT})"
