@@ -4380,10 +4380,6 @@ uninstall_slowdns() {
     systemctl daemon-reload
     echo -e "\n${C_GREEN}✅ SlowDNS (DNSTT) Uninstalled Successfully.${C_RESET}"
 }
-    _ff_rebuild_udp_dnat_rules
-
-    echo -e "\n${C_GREEN}✅ SlowUDP Uninstalled Successfully.${C_RESET}"
-}
 
 _slowudp_meta_init() {
     mkdir -p "$SLOWUDP_DIR" 2>/dev/null
