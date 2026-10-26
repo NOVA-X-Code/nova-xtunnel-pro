@@ -3108,17 +3108,6 @@ write_internal_nginx_config() {
     [[ -z "$server_name" ]] && server_name="_"
     mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets
 
-    local panel_port="3000"
-    if [ -f "/opt/nova-x-tunnel/web-panel/.env" ]; then
-        local p
-        p=$(grep -E '^PORT=' /opt/nova-x-tunnel/web-panel/.env | cut -d'=' -f2 | tr -d ' "\'\r')
-        [ -n "$p" ] && panel_port="$p"
-    elif [ -f "/opt/novaxtunnel/web-panel/.env" ]; then
-        local p
-        p=$(grep -E '^PORT=' /opt/novaxtunnel/web-panel/.env | cut -d'=' -f2 | tr -d ' "\'\r')
-        [ -n "$p" ] && panel_port="$p"
-    fi
-
     # The proxy locations are identical for every domain, so they live in one shared snippet
     # included by each server block.
     cat > "$NGINX_LOCATIONS_SNIPPET" <<'EOF'
@@ -3145,7 +3134,7 @@ write_internal_nginx_config() {
     location /api/ {
         proxy_read_timeout 300s;
         proxy_http_version 1.1;
-        proxy_pass http://127.0.0.1:__PANEL_PORT__;
+        proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -3168,7 +3157,6 @@ write_internal_nginx_config() {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 EOF
-    sed -i "s|__PANEL_PORT__|$panel_port|g" "$NGINX_LOCATIONS_SNIPPET"
 
     # Default server: main self-signed certificate "novaxtunnel" (VPS IP / unknown SNI).
     cat > "$NGINX_CONFIG_FILE" <<EOF
