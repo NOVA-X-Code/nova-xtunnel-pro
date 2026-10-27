@@ -2406,25 +2406,11 @@ EOF
 }
 
 detect_preferred_host() {
-    local host_domain=""
-    load_edge_cert_info
-    if [[ -n "$EDGE_DOMAIN" ]]; then
-        host_domain="$EDGE_DOMAIN"
-    fi
-    if [[ -z "$host_domain" && -f "$DNS_INFO_FILE" ]]; then
-        host_domain=$(grep 'FULL_DOMAIN' "$DNS_INFO_FILE" | cut -d'"' -f2)
-    fi
-    if [[ -z "$host_domain" && -f "$NGINX_CONFIG_FILE" ]]; then
-        local nginx_domain
-        nginx_domain=$(grep -oP 'server_name \K[^\s;]+' "$NGINX_CONFIG_FILE" 2>/dev/null | head -n 1)
-        if [[ "$nginx_domain" != "_" && -n "$nginx_domain" ]]; then
-            host_domain="$nginx_domain"
-        fi
-    fi
-    if [[ -z "$host_domain" ]]; then
-        host_domain=$(curl -s -4 icanhazip.com)
-    fi
-    echo "$host_domain"
+    local ip_addr=""
+    ip_addr=$(curl -s -4 --max-time 3 icanhazip.com 2>/dev/null)
+    [[ -z "$ip_addr" ]] && ip_addr=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [[ -z "$ip_addr" ]] && ip_addr="127.0.0.1"
+    echo "$ip_addr"
 }
 
 backup_edge_configs() {
