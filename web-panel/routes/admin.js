@@ -316,25 +316,6 @@ router.post('/config-templates/:id/edit', (req, res) => {
         quotaGb: 0
       });
       zivpnLib.addPassword(targetPass, { expires: null, quota_gb: 0 });
-    } catch (e) {}
-      sni || '',
-      v2ray_link || '',
-      public_key || '',
-      nameserver || '',
-      dns_server || '8.8.8.8',
-      xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
-      path || '',
-      default_user || null,
-      default_pass || null,
-      is_base_config,
-      (is_customizable === '1' || access_type === 'global_premium' || access_type === 'reseller_option') ? 1 : 0,
-      is_quota_counted === '1' ? 1 : 0,
-      is_global_premium,
-      parseFloat(max_data_gb) || 0,
-      req.params.id
-    );
-
-    audit.log('admin', req.session.username, 'edit_template', `Template mis à jour : ${name}`, req.params.id);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Configuration serveur mise à jour.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
