@@ -238,18 +238,5 @@ router.post('/access-codes/:id/delete', (req, res) => {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
-});
-
-router.post('/access-codes/:id/delete', (req, res) => {
-  const reseller = loadSelf(req);
-  if (!reseller) return res.redirect('/login');
-
-  try {
-    db.prepare('DELETE FROM access_codes WHERE id = ? AND reseller_id = ?').run(req.params.id, reseller.id);
-    res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
-  } catch (e) {
-    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
-  }
-});
 
 module.exports = router;
