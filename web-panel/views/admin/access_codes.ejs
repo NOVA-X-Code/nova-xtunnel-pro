@@ -217,10 +217,10 @@
         </div>
       </div>
 
-      <!-- CARD 2: Message de Mise à Jour App (UpdateMessage) -->
+      <!-- CARD 2: Message de Mise à Jour App & Identifiants Globaux -->
       <div class="stat-card" style="border-color:rgba(124, 92, 255, 0.3);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-          <h3 style="margin:0; font-size:15px; color:#C4B5FD; font-weight:800;">💬 Message de Mise à Jour (`UpdateMessage`)</h3>
+          <h3 style="margin:0; font-size:15px; color:#C4B5FD; font-weight:800;">💬 Réglages App & Identifiants Globaux</h3>
           <span class="badge badge-purple">Version App: <%= (typeof appSettings !== 'undefined' && appSettings.app_version) ? appSettings.app_version : '1.0.5' %></span>
         </div>
         <form method="POST" action="/admin/app-settings">
@@ -228,8 +228,20 @@
             <input type="text" name="app_version" value="<%= (typeof appSettings !== 'undefined' && appSettings.app_version) ? appSettings.app_version : '1.0.5' %>" placeholder="Version (ex: 1.0.5)" class="form-control" style="font-size:12px;" />
             <textarea name="update_message" rows="2" placeholder="Message HTML affiché dans l'App (ex: <b>Mise à jour réussie !</b><br/>...)" class="form-control" style="font-size:12px; resize:vertical;"><%= (typeof appSettings !== 'undefined' && appSettings.update_message) ? appSettings.update_message : '<b>★ Application NovaXTunnel à jour</b><br/>Serveurs chargés avec succès.' %></textarea>
           </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; border-top:1px solid var(--border); padding-top:10px;">
+            <div>
+              <label style="font-size:11px; color:#94A3B8;">User SSH Gratuit Globaux (`USER`)</label>
+              <input type="text" name="default_ssh_user" value="<%= (typeof appSettings !== 'undefined' && appSettings.default_ssh_user) ? appSettings.default_ssh_user : 'NOSTRA' %>" placeholder="NOSTRA" class="form-control" style="font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:11px; color:#94A3B8;">Mdp SSH & ZiVPN (`PASS`)</label>
+              <input type="text" name="default_ssh_pass" value="<%= (typeof appSettings !== 'undefined' && appSettings.default_ssh_pass) ? appSettings.default_ssh_pass : '@LaBoKingFreeSurf' %>" placeholder="@LaBoKingFreeSurf" class="form-control" style="font-size:12px;" />
+            </div>
+          </div>
+
           <div style="text-align:right;">
-            <button type="submit" class="btn-glow btn-glow-primary" style="padding:6px 14px; font-size:12px;">Enregistrer Message App</button>
+            <button type="submit" class="btn-glow btn-glow-primary" style="padding:6px 14px; font-size:12px;">Enregistrer & Synchroniser</button>
           </div>
         </form>
       </div>
@@ -699,11 +711,11 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
               <div>
                 <label style="font-size:11px; color:#94A3B8;">Utilisateur / UUID Public (`USER`)</label>
-                <input type="text" name="default_user" placeholder="ex: free_user" class="form-control" />
+                <input type="text" name="default_user" placeholder="NOSTRA" class="form-control" />
               </div>
               <div>
                 <label style="font-size:11px; color:#94A3B8;">Mot de passe Public (`PASS`)</label>
-                <input type="text" name="default_pass" placeholder="ex: free_pass" class="form-control" />
+                <input type="text" name="default_pass" placeholder="@LaBoKingFreeSurf" class="form-control" />
               </div>
             </div>
           </div>
@@ -862,7 +874,51 @@
           </div>
         </div>
 
+        <!-- Options de type d'accès & visibilité dans Edit Modal -->
         <div style="border-top:1px solid var(--border); padding-top:16px; margin-top:18px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#94A3B8; text-transform:uppercase; margin-bottom:10px; letter-spacing:0.5px;">Type de Publication & Visibilité du Serveur</label>
+
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+            <label style="display:flex; align-items:flex-start; gap:12px; padding:12px; background:rgba(124, 92, 255, 0.08); border:1px solid rgba(124, 92, 255, 0.25); border-radius:12px; cursor:pointer;">
+              <input type="radio" name="access_type" id="editAccessTypeBase" value="base" style="margin-top:3px;" onchange="toggleEditDefaultCreds()" />
+              <div>
+                <div style="font-weight:800; color:#C4B5FD; font-size:13px;">⭐ Serveur Gratuit de Base (Non-Premium)</div>
+                <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Visible et utilisable gratuitement par tous les utilisateurs de l'application (sans besoin de Code Premium).</div>
+              </div>
+            </label>
+
+            <label style="display:flex; align-items:flex-start; gap:12px; padding:12px; background:rgba(34, 211, 238, 0.08); border:1px solid rgba(34, 211, 238, 0.25); border-radius:12px; cursor:pointer;">
+              <input type="radio" name="access_type" id="editAccessTypeGlobal" value="global_premium" style="margin-top:3px;" onchange="toggleEditDefaultCreds()" />
+              <div>
+                <div style="font-weight:800; color:#38BDF8; font-size:13px;">👑 Serveur Global Premium Admin</div>
+                <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Inclus automatiquement dans TOUTES les clés Premium (Admin et Revendeurs) avec un identifiant unique par client.</div>
+              </div>
+            </label>
+
+            <label style="display:flex; align-items:flex-start; gap:12px; padding:12px; background:rgba(255, 255, 255, 0.03); border:1px solid var(--border); border-radius:12px; cursor:pointer;">
+              <input type="radio" name="access_type" id="editAccessTypeReseller" value="reseller_option" style="margin-top:3px;" onchange="toggleEditDefaultCreds()" />
+              <div>
+                <div style="font-weight:800; color:#F8FAFC; font-size:13px;">📦 Serveur Optionnel Revendeur</div>
+                <div style="font-size:11px; color:#94A3B8; margin-top:2px;">Proposé aux revendeurs comme serveur complémentaire qu'ils peuvent choisir de cocher lors de la création d'un code.</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Identifiants par défaut pour serveurs gratuits -->
+          <div id="editDefaultCredsGroup" style="display:block; padding:14px; background:rgba(255,255,255,0.02); border-radius:12px; border:1px solid var(--border); margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:800; color:#C4B5FD; margin-bottom:8px;">🔑 Identifiants publics par défaut (Catalogue Gratuit)</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div>
+                <label style="font-size:11px; color:#94A3B8;">Utilisateur / UUID Public (`USER`)</label>
+                <input type="text" name="default_user" id="editDefaultUser" placeholder="ex: NOSTRA" class="form-control" />
+              </div>
+              <div>
+                <label style="font-size:11px; color:#94A3B8;">Mot de passe Public (`PASS`)</label>
+                <input type="text" name="default_pass" id="editDefaultPass" placeholder="ex: @LaBoKingFreeSurf" class="form-control" />
+              </div>
+            </div>
+          </div>
+
           <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer; margin-bottom:10px;">
             <input type="checkbox" name="is_customizable" id="editIsCustomizable" value="1" />
             <span>✏️ Champs Personnalisables dans l'App (`isCustomizable: true`) — Permet à l'utilisateur dans l'App de modifier/saisir ses propres Payload, SNI, Proxy ou Clés DNS</span>
@@ -907,6 +963,21 @@
           <label>HWID / Empreinte Appareil Client (Facultatif)</label>
           <input type="text" name="hwid" placeholder="Ex: HWID-A1B2C3D4E5F6 (Vide = auto-liaison au 1er clic)" class="form-control" />
         </div>
+
+        <% if (typeof extraTemplates !== 'undefined' && extraTemplates.length > 0) { %>
+          <div class="form-group" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+            <label>Serveurs Premium Optionnels à Inclure</label>
+            <div style="max-height:140px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:rgba(0,0,0,0.3);">
+              <% extraTemplates.forEach(t => { %>
+                <label style="display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:13px; cursor:pointer;">
+                  <input type="checkbox" name="selectedTemplateIds" value="<%= t.id %>" checked />
+                  <span style="font-weight:600; color:#F8FAFC;"><%= t.name %></span>
+                  <span class="badge badge-purple" style="font-size:10px; padding:2px 6px;"><%= t.protocol.toUpperCase() %></span>
+                </label>
+              <% }); %>
+            </div>
+          </div>
+        <% } %>
 
         <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:28px;">
           <button type="button" class="btn-ghost" onclick="closeModal('modalCreateCode')">Annuler</button>
@@ -1033,11 +1104,9 @@
       v2rayGroup.style.display = 'none';
       dnsGroup.style.display = 'none';
 
-      if (typeMode === 'SSH_DIRECT') {
-        // Standard
-      } else if (typeMode === 'SSH_PROXY') {
-        proxyGroup.style.display = 'grid';
+      if (typeMode === 'SSH_DIRECT' || typeMode === 'SSH_PROXY') {
         payloadGroup.style.display = 'block';
+        if (typeMode === 'SSH_PROXY') proxyGroup.style.display = 'grid';
       } else if (typeMode === 'SSH_SSL') {
         sniGroup.style.display = 'block';
       } else if (typeMode === 'PAY_SSL') {
@@ -1070,6 +1139,16 @@
       group.style.display = (selected === 'base') ? 'block' : 'none';
     }
 
+    function toggleEditDefaultCreds() {
+      var radios = document.getElementsByName('access_type');
+      var group = document.getElementById('editDefaultCredsGroup');
+      var selected = 'base';
+      for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) selected = radios[i].value;
+      }
+      group.style.display = (selected === 'base') ? 'block' : 'none';
+    }
+
     function openEditTemplateModal(t) {
       document.getElementById('formEditTemplate').action = '/admin/config-templates/' + t.id + '/edit';
       document.getElementById('editName').value = t.name || '';
@@ -1088,6 +1167,18 @@
       document.getElementById('editDnsServer').value = t.dns_server || '8.8.8.8';
       document.getElementById('editMaxDataGb').value = t.max_data_gb || 0;
       document.getElementById('editIsCustomizable').checked = (t.is_customizable === 1);
+
+      if (t.is_base_config === 1) {
+        document.getElementById('editAccessTypeBase').checked = true;
+      } else if (t.is_global_premium === 1) {
+        document.getElementById('editAccessTypeGlobal').checked = true;
+      } else {
+        document.getElementById('editAccessTypeReseller').checked = true;
+      }
+
+      document.getElementById('editDefaultUser').value = t.default_user || '';
+      document.getElementById('editDefaultPass').value = t.default_pass || '';
+      toggleEditDefaultCreds();
 
       openModal('modalEditTemplate');
     }

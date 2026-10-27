@@ -57,6 +57,11 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
     if (!access_code || access_code.trim().length === 0 || access_code.trim().toUpperCase() === 'DEFAULT' || access_code.trim().toUpperCase() === 'FREE') {
       const baseTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 1').all();
 
+      const globalUserRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_ssh_user'").get();
+      const globalPassRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_ssh_pass'").get();
+      const globalUser = (globalUserRow && globalUserRow.value) ? globalUserRow.value : 'NOSTRA';
+      const globalPass = (globalPassRow && globalPassRow.value) ? globalPassRow.value : '@LaBoKingFreeSurf';
+
       const servers = baseTemplates.map(t => {
         const s = {
           Name: t.name,
@@ -65,8 +70,8 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
           TYPE: t.protocol.toUpperCase(),
           ServerIP: t.server_ip,
           ServerPort: t.server_port,
-          USER: t.default_user || 'NOSTRA',
-          PASS: t.default_pass || '@LaBoKingFreeSurf',
+          USER: t.default_user || globalUser,
+          PASS: t.default_pass || globalPass,
           isCustomizable: t.is_customizable === 1
         };
         if (t.proxy_ip) s.ProxyIP = t.proxy_ip;

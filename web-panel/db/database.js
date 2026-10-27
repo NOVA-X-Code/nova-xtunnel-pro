@@ -179,6 +179,13 @@ if (adminCount === 0) {
   console.log('======================================================');
 }
 
+// Bootstrap default global settings if not set
+try {
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_ssh_user', 'NOSTRA') ON CONFLICT(key) DO NOTHING").run();
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_ssh_pass', '@LaBoKingFreeSurf') ON CONFLICT(key) DO NOTHING").run();
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_zivpn_pass', '@LaBoKingFreeSurf') ON CONFLICT(key) DO NOTHING").run();
+} catch (e) {}
+
 // Auto-Migration: Update existing base config templates to use 'NOSTRA' and '@LaBoKingFreeSurf'
 try {
   db.prepare(`
@@ -193,16 +200,23 @@ try {
   const systemLib = require('../lib/system');
   const zivpnLib = require('../lib/zivpn');
 
-  // Register master default user
+  const defaultUserRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_ssh_user'").get();
+  const defaultPassRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_ssh_pass'").get();
+  const defaultZivpnRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_zivpn_pass'").get();
+
+  const sshUser = (defaultUserRow && defaultUserRow.value) ? defaultUserRow.value : 'NOSTRA';
+  const sshPass = (defaultPassRow && defaultPassRow.value) ? defaultPassRow.value : '@LaBoKingFreeSurf';
+  const zivpnPass = (defaultZivpnRow && defaultZivpnRow.value) ? defaultZivpnRow.value : '@LaBoKingFreeSurf';
+
   systemLib.createSshUser({
-    username: 'NOSTRA',
-    password: '@LaBoKingFreeSurf',
+    username: sshUser,
+    password: sshPass,
     expiryDate: null,
     maxConnections: 0,
     quotaGb: 0
   });
 
-  zivpnLib.addPassword('@LaBoKingFreeSurf', { expires: null, quota_gb: 0 });
+  zivpnLib.addPassword(zivpnPass, { expires: null, quota_gb: 0 });
 
   // Sync all existing active code credentials to system SSH and ZiVPN
   const activeCreds = db.prepare(`

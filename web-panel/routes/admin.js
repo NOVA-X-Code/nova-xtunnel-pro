@@ -164,6 +164,7 @@ router.post('/change-password', (req, res) => {
 // Templates & Access Codes Management (Admin)
 router.get('/access-codes', (req, res) => {
   const templates = db.prepare('SELECT * FROM config_templates ORDER BY id DESC').all();
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 AND is_global_premium = 0').all();
   const accessCodes = db.prepare(`
     SELECT ac.*, r.username as reseller_username
     FROM access_codes ac
@@ -178,6 +179,7 @@ router.get('/access-codes', (req, res) => {
 
   res.render('admin/access_codes', {
     templates,
+    extraTemplates,
     accessCodes,
     notifications,
     appSettings,
@@ -326,13 +328,40 @@ router.post('/config-templates/:id/edit', (req, res) => {
 
 router.post('/app-settings', (req, res) => {
   try {
-    const { update_message, app_version } = req.body;
+    const { update_message, app_version, default_ssh_user, default_ssh_pass, default_zivpn_pass } = req.body;
     db.prepare("INSERT INTO app_settings (key, value) VALUES ('update_message', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(update_message || '');
     if (app_version) {
       db.prepare("INSERT INTO app_settings (key, value) VALUES ('app_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(app_version);
     }
-    audit.log('admin', req.session.username, 'update_app_settings', 'Paramètres App et message de mise à jour enregistrés', null);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Message de mise à jour de l\'application enregistré.'));
+    if (default_ssh_user) {
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_ssh_user', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(default_ssh_user.trim());
+    }
+    if (default_ssh_pass) {
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_ssh_pass', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(default_ssh_pass.trim());
+    }
+    if (default_zivpn_pass) {
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_zivpn_pass', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(default_zivpn_pass.trim());
+    }
+
+    // Provision on Linux immediately
+    const targetUser = default_ssh_user ? default_ssh_user.trim() : 'NOSTRA';
+    const targetPass = default_ssh_pass ? default_ssh_pass.trim() : '@LaBoKingFreeSurf';
+    const targetZivpn = default_zivpn_pass ? default_zivpn_pass.trim() : '@LaBoKingFreeSurf';
+    try {
+      const systemLib = require('../lib/system');
+      const zivpnLib = require('../lib/zivpn');
+      systemLib.createSshUser({
+        username: targetUser,
+        password: targetPass,
+        expiryDate: null,
+        maxConnections: 0,
+        quotaGb: 0
+      });
+      zivpnLib.addPassword(targetZivpn, { expires: null, quota_gb: 0 });
+    } catch (e) {}
+
+    audit.log('admin', req.session.username, 'update_app_settings', 'Paramètres App et identifiants globaux enregistrés', null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Paramètres globaux enregistrés et synchronisés sur le serveur.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
   }
@@ -350,17 +379,20 @@ router.post('/config-templates/:id/delete', (req, res) => {
 router.post('/access-codes', (req, res) => {
   try {
     const accessCodesLib = require('../lib/accessCodes');
-    const { clientReference, maxDataGb, expiryDays, hwid } = req.body;
+    const { clientReference, maxDataGb, expiryDays, hwid, selectedTemplateIds } = req.body;
+
+    const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
 
     const result = accessCodesLib.createAccessCode({
       resellerId: null, // Created by admin directly
       clientReference: clientReference || '',
       maxDataGb: parseFloat(maxDataGb) || 20,
-      expiryDays: parseInt(expiryDays, 10) || 30
+      expiryDays: parseInt(expiryDays, 10) || 30,
+      selectedTemplateIds: templatesList
     });
 
     if (hwid && hwid.trim().length > 0) {
-      db.prepare('UPDATE access_codes SET allowed_hwids = ? WHERE id = ?').run(hwid.trim(), result.accessCodeId);
+      db.prepare('UPDATE access_codes SET allowed_hwids = ? WHERE id = ?').run(hwid.trim().toUpperCase(), result.accessCodeId);
     }
 
     audit.log('admin', req.session.username, 'create_access_code', `Code d'accès Admin généré : ${result.code}`, null);
