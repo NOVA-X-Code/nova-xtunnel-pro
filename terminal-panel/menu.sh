@@ -3201,6 +3201,35 @@ EOF
         done < "$EDGE_DOMAINS_FILE"
     fi
 
+    # Automatically scan and restore all active Let's Encrypt Certbot SSL domains
+    if [ -d "/etc/letsencrypt/live" ]; then
+        for cert_dir in /etc/letsencrypt/live/*; do
+            if [ -d "$cert_dir" ]; then
+                local cert_domain
+                cert_domain=$(basename "$cert_dir")
+                [ "$cert_domain" == "README" ] && continue
+                if [ -s "$cert_dir/fullchain.pem" ] && [ -s "$cert_dir/privkey.pem" ]; then
+                    cat >> "$NGINX_CONFIG_FILE" <<EOF
+
+server {
+    listen 127.0.0.1:${NGINX_INTERNAL_TLS_PORT} ssl http2;
+    server_tokens off;
+    server_name ${cert_domain};
+
+    ssl_certificate ${cert_dir}/fullchain.pem;
+    ssl_certificate_key ${cert_dir}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!eNULL:!MD5:!DES:!RC4:!ADH:!SSLv3:!EXP:!PSK:!DSS;
+    resolver 1.1.1.1 8.8.8.8 ipv6=off valid=300s;
+
+    include ${NGINX_LOCATIONS_SNIPPET};
+}
+EOF
+                fi
+            fi
+        done
+    fi
+
     ln -sf "$NGINX_CONFIG_FILE" /etc/nginx/sites-enabled/default
 }
 

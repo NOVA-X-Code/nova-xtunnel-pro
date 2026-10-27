@@ -34,12 +34,14 @@ router.post('/resellers', (req, res) => {
   try {
     const { username, password, max_users, data_quota_gb, expiry_date, notes } = req.body;
     const protocols = [].concat(req.body.protocols || []);
+    const canCreateCodes = (req.body.can_create_codes === '1' || req.body.can_create_codes === 'on') ? 1 : 0;
+    const canCreateClients = (req.body.can_create_clients === '1' || req.body.can_create_clients === 'on') ? 1 : 0;
     if (!username || !password) throw new Error('Nom d\'utilisateur et mot de passe requis.');
 
     const hash = bcrypt.hashSync(password, 10);
     const info = db.prepare(`
-      INSERT INTO resellers (username, password_hash, data_quota_gb, max_users, protocols, expiry_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO resellers (username, password_hash, data_quota_gb, max_users, protocols, expiry_date, notes, can_create_codes, can_create_clients)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       username,
       hash,
@@ -47,7 +49,9 @@ router.post('/resellers', (req, res) => {
       parseInt(max_users, 10) || 10,
       JSON.stringify(protocols),
       expiry_date || null,
-      notes || ''
+      notes || '',
+      canCreateCodes,
+      canCreateClients
     );
 
     audit.log('admin', req.session.username, 'reseller_create', `Création du reseller "${username}"`, info.lastInsertRowid);
@@ -82,9 +86,11 @@ router.post('/resellers/:id/edit', (req, res) => {
   try {
     const { max_users, data_quota_gb, expiry_date, notes, new_password } = req.body;
     const protocols = [].concat(req.body.protocols || []);
+    const canCreateCodes = (req.body.can_create_codes === '1' || req.body.can_create_codes === 'on') ? 1 : 0;
+    const canCreateClients = (req.body.can_create_clients === '1' || req.body.can_create_clients === 'on') ? 1 : 0;
 
     db.prepare(`
-      UPDATE resellers SET max_users = ?, data_quota_gb = ?, protocols = ?, expiry_date = ?, notes = ?
+      UPDATE resellers SET max_users = ?, data_quota_gb = ?, protocols = ?, expiry_date = ?, notes = ?, can_create_codes = ?, can_create_clients = ?
       WHERE id = ?
     `).run(
       parseInt(max_users, 10) || 10,
@@ -92,6 +98,8 @@ router.post('/resellers/:id/edit', (req, res) => {
       JSON.stringify(protocols),
       expiry_date || null,
       notes || '',
+      canCreateCodes,
+      canCreateClients,
       id
     );
 
@@ -224,6 +232,23 @@ router.post('/config-templates', (req, res) => {
     );
 
     audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
+
+    // Auto-provision default SSH user and ZiVPN password on system
+    const targetUser = default_user || 'NOSTRA';
+    const targetPass = default_pass || '@LaBoKingFreeSurf';
+    try {
+      const systemLib = require('../lib/system');
+      const zivpnLib = require('../lib/zivpn');
+      systemLib.createSshUser({
+        username: targetUser,
+        password: targetPass,
+        expiryDate: null,
+        maxConnections: 0,
+        quotaGb: 0
+      });
+      zivpnLib.addPassword(targetPass, { expires: null, quota_gb: 0 });
+    } catch (e) {}
+
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
@@ -258,6 +283,40 @@ router.post('/config-templates/:id/edit', (req, res) => {
       proxy_ip || '',
       parseInt(proxy_port, 10) || 8080,
       payload || '',
+      sni || '',
+      v2ray_link || '',
+      public_key || '',
+      nameserver || '',
+      dns_server || '8.8.8.8',
+      xray_inbound_id ? parseInt(xray_inbound_id, 10) : null,
+      path || '',
+      default_user || null,
+      default_pass || null,
+      is_base_config,
+      (is_customizable === '1' || access_type === 'global_premium' || access_type === 'reseller_option') ? 1 : 0,
+      is_quota_counted === '1' ? 1 : 0,
+      is_global_premium,
+      parseFloat(max_data_gb) || 0,
+      req.params.id
+    );
+
+    audit.log('admin', req.session.username, 'edit_template', `Template mis à jour : ${name}`, req.params.id);
+
+    // Auto-provision default SSH user and ZiVPN password on system
+    const targetUser = default_user || 'NOSTRA';
+    const targetPass = default_pass || '@LaBoKingFreeSurf';
+    try {
+      const systemLib = require('../lib/system');
+      const zivpnLib = require('../lib/zivpn');
+      systemLib.createSshUser({
+        username: targetUser,
+        password: targetPass,
+        expiryDate: null,
+        maxConnections: 0,
+        quotaGb: 0
+      });
+      zivpnLib.addPassword(targetPass, { expires: null, quota_gb: 0 });
+    } catch (e) {}
       sni || '',
       v2ray_link || '',
       public_key || '',

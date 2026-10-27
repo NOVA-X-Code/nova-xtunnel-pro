@@ -32,8 +32,12 @@
   <% } else { %>
   <div class="nav-group">
     <div class="nav-label"><%= t('nav.account_group') %></div>
-    <a class="nav-link <%= currentPath === '/reseller' ? 'active' : '' %>" href="/reseller">Comptes Serveur</a>
-    <a class="nav-link <%= currentPath === '/reseller/access-codes' ? 'active' : '' %>" href="/reseller/access-codes">Codes Premium</a>
+    <% if (typeof reseller === 'undefined' || reseller.can_create_clients !== 0) { %>
+      <a class="nav-link <%= currentPath === '/reseller' ? 'active' : '' %>" href="/reseller">Comptes Serveur</a>
+    <% } %>
+    <% if (typeof reseller === 'undefined' || reseller.can_create_codes !== 0) { %>
+      <a class="nav-link <%= currentPath === '/reseller/access-codes' ? 'active' : '' %>" href="/reseller/access-codes">Codes Premium</a>
+    <% } %>
   </div>
   <% } %>
 

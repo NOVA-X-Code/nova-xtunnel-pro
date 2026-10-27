@@ -21,6 +21,12 @@ function actorFrom(req) {
 router.get('/', (req, res) => {
   const reseller = loadSelf(req);
   if (!reseller) return res.redirect('/login');
+
+  // If reseller is strictly a Code Reseller (cannot manage server accounts), redirect directly to access-codes!
+  if (reseller.can_create_clients === 0 && reseller.can_create_codes !== 0) {
+    return res.redirect('/reseller/access-codes');
+  }
+
   const stats = quota.getResellerStats(reseller);
   const clients = stats.clients.map((c) => ({
     ...c,
@@ -48,6 +54,11 @@ router.get('/activity', (req, res) => {
 
 router.post('/clients', (req, res) => {
   const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  if (reseller.can_create_clients === 0) {
+    return res.redirect('/reseller?error=' + encodeURIComponent('Accès refusé : La création de comptes serveur individuels n\'est pas autorisée pour votre profil.'));
+  }
   try {
     const result = clientsLib.createClient(reseller.id, req.body, actorFrom(req));
     let msg = 'Compte client créé.';
@@ -139,6 +150,10 @@ router.get('/access-codes', (req, res) => {
   const reseller = loadSelf(req);
   if (!reseller) return res.redirect('/login');
 
+  if (reseller.can_create_codes === 0) {
+    return res.redirect('/reseller?error=' + encodeURIComponent('Accès refusé : La génération de codes Premium n\'est pas autorisée pour votre compte.'));
+  }
+
   const accessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
   const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0').all();
 
@@ -154,6 +169,10 @@ router.get('/access-codes', (req, res) => {
 router.post('/access-codes', (req, res) => {
   const reseller = loadSelf(req);
   if (!reseller) return res.redirect('/login');
+
+  if (reseller.can_create_codes === 0) {
+    return res.redirect('/reseller?error=' + encodeURIComponent('Accès refusé : La génération de codes Premium n\'est pas autorisée pour votre compte.'));
+  }
 
   try {
     const accessCodesLib = require('../lib/accessCodes');

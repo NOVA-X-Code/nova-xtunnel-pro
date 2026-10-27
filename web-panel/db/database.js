@@ -152,6 +152,18 @@ try {
   if (!/duplicate column/i.test(e.message)) throw e;
 }
 
+try {
+  db.exec('ALTER TABLE resellers ADD COLUMN can_create_codes INTEGER DEFAULT 1');
+} catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+
+try {
+  db.exec('ALTER TABLE resellers ADD COLUMN can_create_clients INTEGER DEFAULT 1');
+} catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+
 // Bootstrap a default admin account on first run only.
 const adminCount = db.prepare('SELECT COUNT(*) AS c FROM admins').get().c;
 if (adminCount === 0) {

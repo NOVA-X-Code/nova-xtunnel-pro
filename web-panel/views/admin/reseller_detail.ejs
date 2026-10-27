@@ -87,6 +87,18 @@
           <% }) %>
         </div>
 
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; background:rgba(255,255,255,0.02); padding:12px; border-radius:10px; border:1px solid var(--border);">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+            <input type="checkbox" name="can_create_codes" value="1" <%= reseller.can_create_codes !== 0 ? 'checked' : '' %> style="width:16px; height:16px;">
+            <span style="font-size:13px; font-weight:700; color:#C4B5FD;">🔑 Autoriser les Codes Premium</span>
+          </label>
+
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+            <input type="checkbox" name="can_create_clients" value="1" <%= reseller.can_create_clients !== 0 ? 'checked' : '' %> style="width:16px; height:16px;">
+            <span style="font-size:13px; font-weight:700; color:#38BDF8;">👥 Autoriser les Comptes Serveurs</span>
+          </label>
+        </div>
+
         <label><%= t('common.new_password_optional') %></label>
         <input type="password" name="new_password">
 
