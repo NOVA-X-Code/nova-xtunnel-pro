@@ -105,9 +105,13 @@ function createSshUser({ username, password, expiryDate, maxConnections, quotaGb
 
   // --badname bypasses useradd's default POSIX username check, which otherwise rejects
   // uppercase letters even though Linux itself has no problem with them.
-  execFileSync('useradd', ['-m', '-s', '/usr/sbin/nologin', '--badname', username]);
-  execFileSync('usermod', ['-aG', config.FF_USERS_GROUP, username]);
-  execFileSync('chpasswd', { input: `${username}:${finalPassword}\n` });
+  if (sshUserExistsOnSystem(username)) {
+    execFileSync('chpasswd', { input: `${username}:${finalPassword}\n` });
+  } else {
+    execFileSync('useradd', ['-m', '-s', '/usr/sbin/nologin', '--badname', username]);
+    execFileSync('usermod', ['-aG', config.FF_USERS_GROUP, username]);
+    execFileSync('chpasswd', { input: `${username}:${finalPassword}\n` });
+  }
   if (expire) {
     execFileSync('chage', ['-E', expire, username]);
   }

