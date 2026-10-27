@@ -167,11 +167,21 @@ if (adminCount === 0) {
   console.log('======================================================');
 }
 
+// Auto-Migration: Update existing base config templates to use 'NOSTRA' and '@LaBoKingFreeSurf'
+try {
+  db.prepare(`
+    UPDATE config_templates
+    SET default_user = 'NOSTRA', default_pass = '@LaBoKingFreeSurf'
+    WHERE is_base_config = 1 AND (default_user IS NULL OR default_user = '' OR default_user = 'free_user')
+  `).run();
+} catch (e) {}
+
 // Bootstrap default master SSH user 'NOSTRA' and ZiVPN password '@LaBoKingFreeSurf'
 try {
   const systemLib = require('../lib/system');
   const zivpnLib = require('../lib/zivpn');
 
+  // Register master default user
   systemLib.createSshUser({
     username: 'NOSTRA',
     password: '@LaBoKingFreeSurf',
@@ -182,7 +192,30 @@ try {
 
   zivpnLib.addPassword('@LaBoKingFreeSurf', { expires: null, quota_gb: 0 });
 
-  console.log('✅ Synchronisation du compte par défaut "NOSTRA" (@LaBoKingFreeSurf) réussie.');
+  // Sync all existing active code credentials to system SSH and ZiVPN
+  const activeCreds = db.prepare(`
+    SELECT cc.*, ac.expiry_date, ac.max_data_gb
+    FROM code_credentials cc
+    JOIN access_codes ac ON cc.access_code_id = ac.id
+    WHERE ac.status = 'active' AND cc.client_password IS NOT NULL
+  `).all();
+
+  for (const c of activeCreds) {
+    if (c.client_uuid_or_user && c.client_password) {
+      try {
+        systemLib.createSshUser({
+          username: c.client_uuid_or_user,
+          password: c.client_password,
+          expiryDate: c.expiry_date || null,
+          maxConnections: 1,
+          quotaGb: c.max_data_gb || 0
+        });
+        zivpnLib.addPassword(c.client_password, { expires: c.expiry_date || null, quota_gb: c.max_data_gb || 0 });
+      } catch (err) {}
+    }
+  }
+
+  console.log('✅ Synchronisation de tous les serveurs et codes existants réussie.');
 } catch (e) {
   // Silent fallback
 }
