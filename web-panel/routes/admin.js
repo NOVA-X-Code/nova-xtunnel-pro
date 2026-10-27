@@ -316,6 +316,8 @@ router.post('/config-templates/:id/edit', (req, res) => {
         quotaGb: 0
       });
       zivpnLib.addPassword(targetPass, { expires: null, quota_gb: 0 });
+    } catch (e) {}
+
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Configuration serveur mise à jour.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
