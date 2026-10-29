@@ -63,6 +63,7 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
       const globalPass = (globalPassRow && globalPassRow.value) ? globalPassRow.value : '@LaBoKingFreeSurf';
 
       const servers = baseTemplates.map(t => {
+        const isZiVpnUdp = t.protocol.toUpperCase() === 'UDP';
         const s = {
           Name: t.name,
           Info: t.info || '',
@@ -70,8 +71,8 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
           TYPE: t.protocol.toUpperCase(),
           ServerIP: t.server_ip,
           ServerPort: t.server_port,
-          USER: t.default_user || globalUser,
-          PASS: t.default_pass || globalPass,
+          USER: isZiVpnUdp ? (t.default_pass || '@LaBoKingFreeSurf') : (t.default_user || globalUser),
+          PASS: isZiVpnUdp ? '' : (t.default_pass || globalPass),
           isCustomizable: t.is_customizable === 1
         };
         if (t.proxy_ip) s.ProxyIP = t.proxy_ip;

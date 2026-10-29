@@ -202,7 +202,7 @@ router.post('/config-templates', (req, res) => {
       is_global_premium = 1;
     }
 
-    db.prepare(`
+    const resultInfo = db.prepare(`
       INSERT INTO config_templates (
         name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass,
         is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb
@@ -233,6 +233,11 @@ router.post('/config-templates', (req, res) => {
       parseFloat(max_data_gb) || 0
     );
 
+    const insertedId = resultInfo.lastInsertRowid;
+    if (is_base_config === 1 || is_global_premium === 1) {
+      propagateTemplateToExistingCodes(insertedId, xray_inbound_id);
+    }
+
     audit.log('admin', req.session.username, 'create_template', `Template créé : ${name}`, null);
 
     // Auto-provision default SSH user and ZiVPN password on system
@@ -250,6 +255,32 @@ router.post('/config-templates', (req, res) => {
       });
       zivpnLib.addPassword(targetPass, { expires: null, quota_gb: 0 });
     } catch (e) {}
+
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+function propagateTemplateToExistingCodes(templateId, xrayInboundId) {
+  try {
+    const activeCodes = db.prepare("SELECT * FROM access_codes WHERE status = 'active'").all();
+    for (const ac of activeCodes) {
+      const existingCred = db.prepare('SELECT id FROM code_credentials WHERE access_code_id = ? AND config_template_id = ?').get(ac.id, templateId);
+      if (!existingCred) {
+        const masterCred = db.prepare('SELECT client_uuid_or_user, client_password FROM code_credentials WHERE access_code_id = ? LIMIT 1').get(ac.id);
+        const userVal = masterCred ? masterCred.client_uuid_or_user : 'NOSTRA';
+        const passVal = masterCred ? masterCred.client_password : '@LaBoKingFreeSurf';
+        const emailTag = `code_${ac.code.replace(/-/g, '')}_in${xrayInboundId || 0}`;
+
+        db.prepare(`
+          INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(ac.id, templateId, xrayInboundId || null, userVal, passVal, emailTag);
+      }
+    }
+  } catch (e) {}
+}
 
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
   } catch (e) {
@@ -303,6 +334,10 @@ router.post('/config-templates/:id/edit', (req, res) => {
     );
 
     audit.log('admin', req.session.username, 'edit_template', `Template mis à jour : ${name}`, req.params.id);
+
+    if (is_base_config === 1 || is_global_premium === 1) {
+      propagateTemplateToExistingCodes(req.params.id, xray_inbound_id);
+    }
 
     // Auto-provision default SSH user and ZiVPN password on system
     const targetUser = default_user || 'NOSTRA';

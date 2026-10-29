@@ -162,6 +162,7 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   }
 
   for (const c of accessCode.credentials) {
+    const isZiVpnUdp = c.protocol.toUpperCase() === 'UDP';
     const serverObj = {
       Name: c.name,
       Info: c.info || '',
@@ -169,8 +170,8 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
       TYPE: c.protocol.toUpperCase(),
       ServerIP: c.server_ip,
       ServerPort: c.server_port,
-      USER: c.client_uuid_or_user,
-      PASS: c.client_password || '',
+      USER: isZiVpnUdp ? (c.client_password || '@LaBoKingFreeSurf') : c.client_uuid_or_user,
+      PASS: isZiVpnUdp ? '' : (c.client_password || ''),
       isCustomizable: c.is_customizable === 1
     };
 
