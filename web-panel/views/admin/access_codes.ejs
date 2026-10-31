@@ -1043,6 +1043,24 @@
           </div>
         </div>
 
+        <% if (typeof extraTemplates !== 'undefined' && extraTemplates.length > 0) { %>
+          <div class="form-group" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+            <label>Gérer les Serveurs Premium Optionnels Associés à ce Code</label>
+            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:rgba(0,0,0,0.3);">
+              <% extraTemplates.forEach(t => { %>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                    <input type="checkbox" name="selectedTemplateIds" id="edit_code_tmpl_<%= t.id %>" value="<%= t.id %>" />
+                    <span style="font-weight:600; color:#F8FAFC;"><%= t.name %></span>
+                    <span class="badge badge-purple" style="font-size:10px; padding:2px 6px;"><%= t.protocol.toUpperCase() %></span>
+                  </label>
+                  <input type="number" step="0.5" name="template_max_gb_<%= t.id %>" id="edit_code_max_gb_<%= t.id %>" placeholder="Go (0=global)" class="form-control" style="width:120px; padding:5px 8px; font-size:11px;" />
+                </div>
+              <% }); %>
+            </div>
+          </div>
+        <% } %>
+
         <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:28px;">
           <button type="button" class="btn-ghost" onclick="closeModal('modalEditCode')">Annuler</button>
           <button type="submit" class="btn-glow btn-glow-success">Enregistrer les Modifications</button>
@@ -1204,6 +1222,23 @@
       document.getElementById('editCodeExpiryDays').value = c.expiry_days || 30;
       document.getElementById('editCodeHwid').value = c.allowed_hwids || '';
       document.getElementById('editCodeStatus').value = c.status || 'active';
+
+      <% if (typeof extraTemplates !== 'undefined' && extraTemplates.length > 0) { %>
+        <% extraTemplates.forEach(t => { %>
+          var chk = document.getElementById('edit_code_tmpl_' + <%= t.id %>);
+          var inputGb = document.getElementById('edit_code_max_gb_' + <%= t.id %>);
+          if (chk) chk.checked = false;
+          if (inputGb) inputGb.value = '';
+        <% }); %>
+        if (c.credentials && Array.isArray(c.credentials)) {
+          c.credentials.forEach(function(cr) {
+            var chk = document.getElementById('edit_code_tmpl_' + cr.config_template_id);
+            var inputGb = document.getElementById('edit_code_max_gb_' + cr.config_template_id);
+            if (chk) chk.checked = true;
+            if (inputGb && cr.template_max_data_gb) inputGb.value = cr.template_max_data_gb;
+          });
+        }
+      <% } %>
 
       openModal('modalEditCode');
     }

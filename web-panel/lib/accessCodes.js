@@ -247,8 +247,76 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   return cryptoLib.encryptConfig(jsonStr);
 }
 
+function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templateMaxDataGbs = {}) {
+  const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(accessCodeId);
+  if (!codeRow) return;
+
+  const baseTemplates = db.prepare('SELECT id FROM config_templates WHERE is_base_config = 1 OR is_global_premium = 1').all();
+  const baseIds = new Set(baseTemplates.map(t => t.id));
+
+  const desiredIds = new Set([...baseIds, ...selectedTemplateIds.map(id => parseInt(id, 10))]);
+
+  const currentCreds = db.prepare('SELECT id, config_template_id, xray_inbound_id, client_email_tag FROM code_credentials WHERE access_code_id = ?').all(accessCodeId);
+  const currentMap = new Map();
+  currentCreds.forEach(cr => currentMap.set(cr.config_template_id, cr));
+
+  const xuiLib = require('./xui');
+
+  for (const [tmplId, cr] of currentMap.entries()) {
+    if (!desiredIds.has(tmplId)) {
+      if (cr.xray_inbound_id && cr.client_email_tag) {
+        try { xuiLib.removeClientFromXuiInbound(cr.xray_inbound_id, cr.client_email_tag); } catch (e) {}
+      }
+      db.prepare('DELETE FROM code_credentials WHERE id = ?').run(cr.id);
+    }
+  }
+
+  const masterUuid = crypto.randomUUID();
+  const masterSshUser = `nxt_${codeRow.code.substring(4, 8).toLowerCase()}_${Math.floor(100 + Math.random() * 900)}`;
+  const masterSshPass = crypto.randomBytes(6).toString('hex');
+
+  for (const tmplId of desiredIds) {
+    const t = db.prepare('SELECT * FROM config_templates WHERE id = ?').get(tmplId);
+    if (!t) continue;
+
+    const specificDataGb = parseFloat(templateMaxDataGbs[tmplId]) || 0;
+
+    if (currentMap.has(tmplId)) {
+      db.prepare('UPDATE code_credentials SET template_max_data_gb = ? WHERE access_code_id = ? AND config_template_id = ?')
+        .run(specificDataGb, accessCodeId, tmplId);
+    } else {
+      let clientUuidOrUser = t.default_user || 'nxt_user';
+      let clientPassword = t.default_pass || 'nxt_pass';
+      const clientEmailTag = `code_${codeRow.code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
+
+      if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
+        if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol.toUpperCase().startsWith('XRAY_')) {
+          clientUuidOrUser = masterUuid;
+          clientPassword = null;
+        } else {
+          clientUuidOrUser = masterSshUser;
+          clientPassword = masterSshPass;
+        }
+      }
+
+      db.prepare(`
+        INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag, template_max_data_gb)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(accessCodeId, t.id, t.xray_inbound_id || null, clientUuidOrUser, clientPassword, clientEmailTag, specificDataGb);
+
+      if (t.xray_inbound_id) {
+        try {
+          const effectiveGb = specificDataGb > 0 ? specificDataGb : codeRow.max_data_gb;
+          xuiLib.addClientToXuiInbound(t.xray_inbound_id, clientUuidOrUser, clientEmailTag, effectiveGb, codeRow.expiry_date);
+        } catch (err) {}
+      }
+    }
+  }
+}
+
 module.exports = {
   createAccessCode,
   getAccessCodeDetails,
-  generateEncryptedConfigForCode
+  generateEncryptedConfigForCode,
+  updateAccessCodeTemplates
 };

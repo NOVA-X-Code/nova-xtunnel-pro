@@ -56,6 +56,19 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
 
     const updatedSettingsJson = JSON.stringify(settingsObj);
     xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(updatedSettingsJson, inboundId);
+
+    // Also insert or update 3X-UI's client_traffics table for statistics tracking
+    try {
+      const trafficRow = xuiDb.prepare('SELECT id FROM client_traffics WHERE email = ?').get(emailTag);
+      if (trafficRow) {
+        xuiDb.prepare('UPDATE client_traffics SET inbound_id = ?, total = ?, expiry_time = ?, enable = 1 WHERE email = ?')
+          .run(inboundId, totalBytes, expMs, emailTag);
+      } else {
+        xuiDb.prepare('INSERT INTO client_traffics (inbound_id, enable, email, up, down, expiry_time, total) VALUES (?, 1, ?, 0, 0, ?, ?)')
+          .run(inboundId, emailTag, expMs, totalBytes);
+      }
+    } catch (e) {}
+
     xuiDb.close();
 
     try { execSync('systemctl restart x-ui 2>/dev/null || x-ui restart 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
@@ -66,7 +79,59 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
   }
 }
 
+function getClientTrafficFromXui(emailTag) {
+  const dbPath = findXuiDbPath();
+  if (!dbPath || !emailTag) return null;
+
+  try {
+    const xuiDb = new Database(dbPath);
+    const row = xuiDb.prepare('SELECT email, up, down, total, expiry_time FROM client_traffics WHERE email = ?').get(emailTag);
+    xuiDb.close();
+    if (!row) return null;
+    return {
+      email: row.email,
+      up: row.up || 0,
+      down: row.down || 0,
+      total: row.total || 0,
+      expiryTime: row.expiry_time || 0
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function removeClientFromXuiInbound(inboundId, emailTag) {
+  const dbPath = findXuiDbPath();
+  if (!dbPath || !emailTag) return false;
+
+  try {
+    const xuiDb = new Database(dbPath);
+
+    if (inboundId) {
+      const row = xuiDb.prepare('SELECT settings FROM inbounds WHERE id = ?').get(inboundId);
+      if (row) {
+        let settingsObj = {};
+        try { settingsObj = JSON.parse(row.settings); } catch (e) {}
+        if (Array.isArray(settingsObj.clients)) {
+          settingsObj.clients = settingsObj.clients.filter(c => c.email !== emailTag);
+          xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(JSON.stringify(settingsObj), inboundId);
+        }
+      }
+    }
+
+    try { xuiDb.prepare('DELETE FROM client_traffics WHERE email = ?').run(emailTag); } catch (e) {}
+    xuiDb.close();
+
+    try { execSync('systemctl restart x-ui 2>/dev/null || x-ui restart 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 module.exports = {
   addClientToXuiInbound,
+  getClientTrafficFromXui,
+  removeClientFromXuiInbound,
   findXuiDbPath
 };

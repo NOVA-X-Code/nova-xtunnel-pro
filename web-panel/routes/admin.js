@@ -452,7 +452,7 @@ router.post('/access-codes', (req, res) => {
 
 router.post('/access-codes/:id/edit', (req, res) => {
   try {
-    const { clientReference, maxDataGb, expiryDays, hwid, status } = req.body;
+    const { clientReference, maxDataGb, expiryDays, hwid, status, selectedTemplateIds } = req.body;
     const codeId = req.params.id;
 
     const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeId);
@@ -484,6 +484,20 @@ router.post('/access-codes/:id/edit', (req, res) => {
       status || 'active',
       codeId
     );
+
+    const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
+    const templateMaxDataGbs = {};
+    if (req.body) {
+      Object.keys(req.body).forEach(k => {
+        if (k.startsWith('template_max_gb_')) {
+          const tId = k.replace('template_max_gb_', '');
+          templateMaxDataGbs[tId] = parseFloat(req.body[k]) || 0;
+        }
+      });
+    }
+
+    const accessCodesLib = require('../lib/accessCodes');
+    accessCodesLib.updateAccessCodeTemplates(codeId, templatesList, templateMaxDataGbs);
 
     audit.log('admin', req.session.username, 'edit_access_code', `Code d'accès modifié : ${codeRow.code}`, null);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour avec succès.`));
