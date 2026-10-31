@@ -282,12 +282,6 @@ function propagateTemplateToExistingCodes(templateId, xrayInboundId) {
   } catch (e) {}
 }
 
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template de config ajouté.'));
-  } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
-  }
-});
-
 router.post('/config-templates/:id/edit', (req, res) => {
   try {
     const { name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass, access_type, is_customizable, is_quota_counted, max_data_gb } = req.body;
