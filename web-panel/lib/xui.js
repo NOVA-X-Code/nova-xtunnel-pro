@@ -20,6 +20,9 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
   if (!dbPath || !inboundId) return false;
 
   try {
+    // 1. Stop x-ui process temporarily to prevent memory cache overwrite
+    try { execSync('systemctl stop x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
+
     const xuiDb = new Database(dbPath);
     // Find inbound by database ID or port number
     let row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE id = ?').get(inboundId);
@@ -29,6 +32,7 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
 
     if (!row) {
       xuiDb.close();
+      try { execSync('systemctl start x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
       return false;
     }
 
@@ -64,7 +68,7 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
     const updatedSettingsJson = JSON.stringify(settingsObj);
     xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(updatedSettingsJson, realInboundId);
 
-    // Also insert or update 3X-UI's client_traffics table for statistics tracking
+    // Insert or update 3X-UI's client_traffics table for statistics tracking & web panel display
     try {
       const trafficRow = xuiDb.prepare('SELECT id FROM client_traffics WHERE email = ?').get(emailTag);
       if (trafficRow) {
@@ -78,10 +82,12 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
 
     xuiDb.close();
 
-    try { execSync('systemctl restart x-ui 2>/dev/null || x-ui restart 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
+    // 2. Start x-ui service so it loads the updated database fresh into memory
+    try { execSync('systemctl start x-ui 2>/dev/null || systemctl restart x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
     return true;
   } catch (e) {
     console.log('3X-UI Sync Note:', e.message);
+    try { execSync('systemctl start x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (err) {}
     return false;
   }
 }
@@ -112,16 +118,21 @@ function removeClientFromXuiInbound(inboundId, emailTag) {
   if (!dbPath || !emailTag) return false;
 
   try {
+    try { execSync('systemctl stop x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
+
     const xuiDb = new Database(dbPath);
 
     if (inboundId) {
-      const row = xuiDb.prepare('SELECT settings FROM inbounds WHERE id = ?').get(inboundId);
+      let row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE id = ?').get(inboundId);
+      if (!row) {
+        row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE port = ?').get(inboundId);
+      }
       if (row) {
         let settingsObj = {};
         try { settingsObj = JSON.parse(row.settings); } catch (e) {}
         if (Array.isArray(settingsObj.clients)) {
           settingsObj.clients = settingsObj.clients.filter(c => c.email !== emailTag);
-          xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(JSON.stringify(settingsObj), inboundId);
+          xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(JSON.stringify(settingsObj), row.id);
         }
       }
     }
@@ -129,9 +140,10 @@ function removeClientFromXuiInbound(inboundId, emailTag) {
     try { xuiDb.prepare('DELETE FROM client_traffics WHERE email = ?').run(emailTag); } catch (e) {}
     xuiDb.close();
 
-    try { execSync('systemctl restart x-ui 2>/dev/null || x-ui restart 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
+    try { execSync('systemctl start x-ui 2>/dev/null || systemctl restart x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
     return true;
   } catch (e) {
+    try { execSync('systemctl start x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (err) {}
     return false;
   }
 }
