@@ -21,11 +21,18 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
 
   try {
     const xuiDb = new Database(dbPath);
-    const row = xuiDb.prepare('SELECT settings FROM inbounds WHERE id = ?').get(inboundId);
+    // Find inbound by database ID or port number
+    let row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE id = ?').get(inboundId);
+    if (!row) {
+      row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE port = ?').get(inboundId);
+    }
+
     if (!row) {
       xuiDb.close();
       return false;
     }
+
+    const realInboundId = row.id;
 
     let settingsObj = {};
     try { settingsObj = JSON.parse(row.settings); } catch (e) { settingsObj = {}; }
@@ -55,17 +62,17 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
     }
 
     const updatedSettingsJson = JSON.stringify(settingsObj);
-    xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(updatedSettingsJson, inboundId);
+    xuiDb.prepare('UPDATE inbounds SET settings = ? WHERE id = ?').run(updatedSettingsJson, realInboundId);
 
     // Also insert or update 3X-UI's client_traffics table for statistics tracking
     try {
       const trafficRow = xuiDb.prepare('SELECT id FROM client_traffics WHERE email = ?').get(emailTag);
       if (trafficRow) {
         xuiDb.prepare('UPDATE client_traffics SET inbound_id = ?, total = ?, expiry_time = ?, enable = 1 WHERE email = ?')
-          .run(inboundId, totalBytes, expMs, emailTag);
+          .run(realInboundId, totalBytes, expMs, emailTag);
       } else {
         xuiDb.prepare('INSERT INTO client_traffics (inbound_id, enable, email, up, down, expiry_time, total) VALUES (?, 1, ?, 0, 0, ?, ?)')
-          .run(inboundId, emailTag, expMs, totalBytes);
+          .run(realInboundId, emailTag, expMs, totalBytes);
       }
     } catch (e) {}
 
