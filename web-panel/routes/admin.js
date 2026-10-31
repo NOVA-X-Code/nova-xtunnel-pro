@@ -202,11 +202,14 @@ router.post('/config-templates', (req, res) => {
       is_global_premium = 1;
     }
 
+    const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
+    const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
+
     const resultInfo = db.prepare(`
       INSERT INTO config_templates (
         name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass,
-        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb, is_auto_generated
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name,
       info || '',
@@ -227,10 +230,11 @@ router.post('/config-templates', (req, res) => {
       default_user || null,
       default_pass || null,
       is_base_config,
-      (is_customizable === '1' || access_type === 'global_premium' || access_type === 'reseller_option') ? 1 : 0,
+      isCustomizableVal,
       is_quota_counted === '1' ? 1 : 0,
       is_global_premium,
-      parseFloat(max_data_gb) || 0
+      parseFloat(max_data_gb) || 0,
+      isAutoGenVal
     );
 
     const insertedId = resultInfo.lastInsertRowid;
@@ -295,10 +299,13 @@ router.post('/config-templates/:id/edit', (req, res) => {
       is_global_premium = 1;
     }
 
+    const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
+    const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
+
     db.prepare(`
       UPDATE config_templates SET
         name = ?, info = ?, flag = ?, protocol = ?, server_ip = ?, server_port = ?, proxy_ip = ?, proxy_port = ?, payload = ?, sni = ?, v2ray_link = ?, public_key = ?, nameserver = ?, dns_server = ?, xray_inbound_id = ?, path = ?, default_user = ?, default_pass = ?,
-        is_base_config = ?, is_customizable = ?, is_quota_counted = ?, is_global_premium = ?, max_data_gb = ?
+        is_base_config = ?, is_customizable = ?, is_quota_counted = ?, is_global_premium = ?, max_data_gb = ?, is_auto_generated = ?
       WHERE id = ?
     `).run(
       name,
@@ -320,10 +327,11 @@ router.post('/config-templates/:id/edit', (req, res) => {
       default_user || null,
       default_pass || null,
       is_base_config,
-      (is_customizable === '1' || access_type === 'global_premium' || access_type === 'reseller_option') ? 1 : 0,
+      isCustomizableVal,
       is_quota_counted === '1' ? 1 : 0,
       is_global_premium,
       parseFloat(max_data_gb) || 0,
+      isAutoGenVal,
       req.params.id
     );
 

@@ -71,13 +71,13 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     let clientPassword = t.default_pass || 'nxt_pass';
     const clientEmailTag = `code_${code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
 
-    // Apply the isCustomizable rule:
-    // If is_customizable = 1 (or template is an extra reseller template), use unique master credentials!
-    if (t.is_customizable === 1 || t.is_base_config === 0) {
-      if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan') {
+    // Apply auto_generate rule:
+    // If is_auto_generated = 1 (or template is an extra reseller template), generate unique master credentials!
+    if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
+      if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol.toUpperCase().startsWith('XRAY_')) {
         clientUuidOrUser = masterUuid;
         clientPassword = null;
-      } else if (t.protocol === 'ssh' || t.protocol === 'udp' || t.protocol === 'slowdns') {
+      } else {
         clientUuidOrUser = masterSshUser;
         clientPassword = masterSshPass;
       }

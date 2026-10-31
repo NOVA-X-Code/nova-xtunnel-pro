@@ -128,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_reseller ON audit_log(reseller_id);
 // Migrations / ALTER TABLE statements (outside db.exec SQL string):
 try { db.exec('ALTER TABLE config_templates ADD COLUMN is_global_premium INTEGER DEFAULT 0'); } catch (e) {}
 try { db.exec('ALTER TABLE config_templates ADD COLUMN max_data_gb REAL DEFAULT 0'); } catch (e) {}
+try { db.exec('ALTER TABLE config_templates ADD COLUMN is_auto_generated INTEGER DEFAULT 1'); } catch (e) {}
 try { db.exec('ALTER TABLE config_templates ADD COLUMN info TEXT DEFAULT ""'); } catch (e) {}
 try { db.exec('ALTER TABLE config_templates ADD COLUMN flag TEXT DEFAULT "fr"'); } catch (e) {}
 try { db.exec('ALTER TABLE config_templates ADD COLUMN proxy_ip TEXT DEFAULT ""'); } catch (e) {}
