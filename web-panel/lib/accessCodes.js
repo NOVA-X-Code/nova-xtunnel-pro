@@ -15,7 +15,7 @@ function generateRandomPassword() {
   return crypto.randomBytes(6).toString('hex');
 }
 
-function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, maxDevices = 1, selectedTemplateIds = [] }) {
+function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {} }) {
   const code = generateRandomCode();
   const validDays = parseInt(expiryDays, 10) || 30;
 
@@ -60,8 +60,6 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
   const allTemplates = Array.from(map.values());
 
   // Generate unified master credentials for this access code:
-  // - The SAME master UUID is used across all V2Ray/Xray inbounds (VLESS, VMess, Trojan)
-  // - The SAME master SSH user & password are used across all SSH/UDP/SlowDNS templates
   const masterUuid = crypto.randomUUID();
   const masterSshUser = `nxt_${code.substring(4, 8).toLowerCase()}_${Math.floor(100 + Math.random() * 900)}`;
   const masterSshPass = generateRandomPassword();
@@ -71,8 +69,10 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     let clientPassword = t.default_pass || 'nxt_pass';
     const clientEmailTag = `code_${code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
 
+    // Specific template data limit if provided, otherwise fallback to template max_data_gb or global maxDataGb
+    const specificDataGb = parseFloat(templateMaxDataGbs[t.id]) || 0;
+
     // Apply auto_generate rule:
-    // If is_auto_generated = 1 (or template is an extra reseller template), generate unique master credentials!
     if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
       if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol.toUpperCase().startsWith('XRAY_')) {
         clientUuidOrUser = masterUuid;
@@ -84,9 +84,18 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     }
 
     db.prepare(`
-      INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(accessCodeId, t.id, t.xray_inbound_id || null, clientUuidOrUser, clientPassword, clientEmailTag);
+      INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag, template_max_data_gb)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(accessCodeId, t.id, t.xray_inbound_id || null, clientUuidOrUser, clientPassword, clientEmailTag, specificDataGb);
+
+    // Sync to 3X-UI inbound database if xray_inbound_id is set
+    if (t.xray_inbound_id) {
+      try {
+        const xuiLib = require('./xui');
+        const effectiveGb = specificDataGb > 0 ? specificDataGb : maxDataGb;
+        xuiLib.addClientToXuiInbound(t.xray_inbound_id, clientUuidOrUser, clientEmailTag, effectiveGb, expiryDateStr);
+      } catch (err) {}
+    }
   }
 
   return { accessCodeId, code, maxDataGb, expiryDays: validDays };

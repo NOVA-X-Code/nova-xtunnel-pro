@@ -165,6 +165,12 @@ try {
   if (!/duplicate column/i.test(e.message)) throw e;
 }
 
+try {
+  db.exec('ALTER TABLE code_credentials ADD COLUMN template_max_data_gb REAL DEFAULT 0');
+} catch (e) {
+  if (!/duplicate column/i.test(e.message)) throw e;
+}
+
 // Bootstrap a default admin account on first run only.
 const adminCount = db.prepare('SELECT COUNT(*) AS c FROM admins').get().c;
 if (adminCount === 0) {

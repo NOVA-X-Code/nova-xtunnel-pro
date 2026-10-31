@@ -180,12 +180,23 @@ router.post('/access-codes', (req, res) => {
 
     const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
 
+    const templateMaxDataGbs = {};
+    if (req.body) {
+      Object.keys(req.body).forEach(k => {
+        if (k.startsWith('template_max_gb_')) {
+          const tId = k.replace('template_max_gb_', '');
+          templateMaxDataGbs[tId] = parseFloat(req.body[k]) || 0;
+        }
+      });
+    }
+
     const result = accessCodesLib.createAccessCode({
       resellerId: reseller.id,
       clientReference: clientReference || '',
       maxDataGb: parseFloat(maxDataGb) || 10,
       expiryDays: parseInt(expiryDays, 10) || 30,
-      selectedTemplateIds: templatesList
+      selectedTemplateIds: templatesList,
+      templateMaxDataGbs
     });
 
     if (hwid && hwid.trim().length > 0) {
