@@ -148,23 +148,9 @@ router.post('/resellers/:id/delete', (req, res) => {
   }
 });
 
-router.post('/change-password', (req, res) => {
-  try {
-    const { new_password } = req.body;
-    if (!new_password || new_password.length < 6) throw new Error('Le mot de passe doit contenir au moins 6 caractères.');
-    const hash = bcrypt.hashSync(new_password, 10);
-    db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hash, req.session.userId);
-    audit.log('admin', req.session.username, 'admin_change_password', 'Mot de passe admin changé', null);
-    res.redirect('/admin?success=' + encodeURIComponent('Mot de passe admin mis à jour.'));
-  } catch (e) {
-    res.redirect('/admin?error=' + encodeURIComponent(e.message));
-  }
-});
-
-// Templates & Access Codes Management (Admin)
 router.get('/access-codes', (req, res) => {
   const templates = db.prepare('SELECT * FROM config_templates ORDER BY id DESC').all();
-  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 AND is_global_premium = 0').all();
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0').all();
   const accessCodes = db.prepare(`
     SELECT ac.*, r.username as reseller_username
     FROM access_codes ac
@@ -204,12 +190,13 @@ router.post('/config-templates', (req, res) => {
 
     const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
     const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
+    const isAdminOnlyVal = (req.body.is_admin_only === '1' || req.body.is_admin_only === 'on') ? 1 : 0;
 
     const resultInfo = db.prepare(`
       INSERT INTO config_templates (
         name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass,
-        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb, is_auto_generated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb, is_auto_generated, is_admin_only
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name,
       info || '',
@@ -234,7 +221,8 @@ router.post('/config-templates', (req, res) => {
       is_quota_counted === '1' ? 1 : 0,
       is_global_premium,
       parseFloat(max_data_gb) || 0,
-      isAutoGenVal
+      isAutoGenVal,
+      isAdminOnlyVal
     );
 
     const insertedId = resultInfo.lastInsertRowid;
@@ -301,11 +289,12 @@ router.post('/config-templates/:id/edit', (req, res) => {
 
     const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
     const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
+    const isAdminOnlyVal = (req.body.is_admin_only === '1' || req.body.is_admin_only === 'on') ? 1 : 0;
 
     db.prepare(`
       UPDATE config_templates SET
         name = ?, info = ?, flag = ?, protocol = ?, server_ip = ?, server_port = ?, proxy_ip = ?, proxy_port = ?, payload = ?, sni = ?, v2ray_link = ?, public_key = ?, nameserver = ?, dns_server = ?, xray_inbound_id = ?, path = ?, default_user = ?, default_pass = ?,
-        is_base_config = ?, is_customizable = ?, is_quota_counted = ?, is_global_premium = ?, max_data_gb = ?, is_auto_generated = ?
+        is_base_config = ?, is_customizable = ?, is_quota_counted = ?, is_global_premium = ?, max_data_gb = ?, is_auto_generated = ?, is_admin_only = ?
       WHERE id = ?
     `).run(
       name,
@@ -332,6 +321,7 @@ router.post('/config-templates/:id/edit', (req, res) => {
       is_global_premium,
       parseFloat(max_data_gb) || 0,
       isAutoGenVal,
+      isAdminOnlyVal,
       req.params.id
     );
 
@@ -431,6 +421,16 @@ router.post('/config-templates/:id/delete', (req, res) => {
   try {
     db.prepare('DELETE FROM config_templates WHERE id = ?').run(req.params.id);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template supprimé.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/config-templates/:id/reset-quota', (req, res) => {
+  try {
+    db.prepare('UPDATE config_templates SET consumed_data_gb = 0 WHERE id = ?').run(req.params.id);
+    audit.log('admin', req.session.username, 'reset_template_quota', `Quota cumulé du serveur #${req.params.id} réinitialisé à 0 Go`, req.params.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation cumulée du serveur réinitialisée à 0 Go.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
   }

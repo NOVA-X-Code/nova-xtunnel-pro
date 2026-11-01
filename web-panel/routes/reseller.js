@@ -155,7 +155,7 @@ router.get('/access-codes', (req, res) => {
   }
 
   const accessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
-  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0').all();
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 AND is_admin_only = 0').all();
 
   res.render('reseller/access_codes', {
     reseller,

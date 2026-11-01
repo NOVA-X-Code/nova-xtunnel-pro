@@ -16,7 +16,6 @@ function verifyAppSignature(req, res, next) {
   const timestamp = req.headers['x-novax-timestamp'];
   const signature = req.headers['x-novax-signature'];
 
-  // Si les en-têtes d'authentification de l'App sont présents, vérifier la signature HMAC-SHA256
   if (timestamp && signature) {
     const now = Date.now();
     const reqTime = parseInt(timestamp, 10);
@@ -138,6 +137,113 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
       status: 'error',
       message: e.message
     });
+  }
+});
+
+// Data Usage Reporting & Real-time Quota Enforcement Endpoint
+router.post('/report-usage', verifyAppSignature, (req, res) => {
+  try {
+    const { access_code, hwid, bytes_used, template_id } = req.body;
+
+    if (!access_code || access_code.trim().toUpperCase() === 'DEFAULT' || access_code.trim().toUpperCase() === 'FREE') {
+      return res.json({ status: 'success', is_active: true, message: 'Free access untracked.' });
+    }
+
+    const cleanCode = access_code.trim().toUpperCase();
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE UPPER(code) = ?').get(cleanCode);
+
+    if (!codeRow) {
+      return res.json({ status: 'error', is_active: false, message: 'Code Premium introuvable.' });
+    }
+
+    if (codeRow.status !== 'active') {
+      return res.json({ status: codeRow.status, is_active: false, message: `Code Premium inactif (${codeRow.status}).` });
+    }
+
+    // Expiration check
+    if (codeRow.expiry_date) {
+      const expTime = new Date(codeRow.expiry_date + "T23:59:59").getTime();
+      if (Date.now() > expTime) {
+        db.prepare("UPDATE access_codes SET status = 'expired' WHERE id = ?").run(codeRow.id);
+        return res.json({ status: 'expired', is_active: false, message: 'Code Premium expiré.' });
+      }
+    }
+
+    // Calculate delta usage in GB
+    const bytesReported = parseFloat(bytes_used) || 0;
+    if (bytesReported > 0) {
+      const usageGb = bytesReported / (1024 * 1024 * 1024);
+
+      // Update consumed_data_gb for the access code
+      db.prepare('UPDATE access_codes SET consumed_data_gb = consumed_data_gb + ? WHERE id = ?').run(usageGb, codeRow.id);
+
+      // Also update cumulative consumed_data_gb on the server template
+      if (template_id) {
+        try {
+          db.prepare('UPDATE config_templates SET consumed_data_gb = consumed_data_gb + ? WHERE id = ?').run(usageGb, template_id);
+        } catch (e) {}
+      }
+
+      // If created by reseller, update reseller's total consumption as well
+      if (codeRow.reseller_id) {
+        db.prepare('UPDATE resellers SET data_quota_gb = MAX(0, data_quota_gb - ?) WHERE id = ? AND data_quota_gb IS NOT NULL').run(usageGb, codeRow.reseller_id);
+      }
+    }
+
+    // Refresh updated row
+    const updatedCode = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeRow.id);
+
+    // Determine effective max data limit (Template specific VS Global code limit)
+    let effectiveMaxGb = updatedCode.max_data_gb;
+    if (template_id) {
+      const tmplRow = db.prepare('SELECT max_data_gb, consumed_data_gb, is_quota_counted FROM config_templates WHERE id = ?').get(template_id);
+      if (tmplRow) {
+        // Check if server template's shared global quota limit is reached
+        if (tmplRow.max_data_gb > 0 && tmplRow.consumed_data_gb >= tmplRow.max_data_gb) {
+          return res.json({
+            status: 'depleted',
+            is_active: false,
+            message: 'Quota Data Global de ce serveur gratuit/partagé atteint !',
+            consumed_gb: tmplRow.consumed_data_gb,
+            max_gb: tmplRow.max_data_gb
+          });
+        }
+        if (tmplRow.is_quota_counted === 0) {
+          effectiveMaxGb = 0;
+        } else {
+          const credRow = db.prepare('SELECT template_max_data_gb FROM code_credentials WHERE access_code_id = ? AND config_template_id = ?')
+            .get(updatedCode.id, template_id);
+          if (credRow && credRow.template_max_data_gb > 0) {
+            effectiveMaxGb = credRow.template_max_data_gb;
+          }
+        }
+      }
+    }
+
+    // IF MAX_DATA_GB === 0 -> UNLIMITED DATA! Never disconnects!
+    if (effectiveMaxGb > 0 && updatedCode.consumed_data_gb >= effectiveMaxGb) {
+      db.prepare("UPDATE access_codes SET status = 'depleted' WHERE id = ?").run(updatedCode.id);
+      return res.json({
+        status: 'depleted',
+        is_active: false,
+        message: 'Quota Data Premium épuisé !',
+        consumed_gb: updatedCode.consumed_data_gb,
+        max_gb: effectiveMaxGb
+      });
+    }
+
+    const remainingGb = effectiveMaxGb > 0 ? Math.max(0, effectiveMaxGb - updatedCode.consumed_data_gb) : -1;
+
+    return res.json({
+      status: 'success',
+      is_active: true,
+      consumed_gb: updatedCode.consumed_data_gb,
+      max_gb: effectiveMaxGb,
+      remaining_gb: remainingGb
+    });
+
+  } catch (e) {
+    return res.json({ status: 'error', is_active: true, message: e.message });
   }
 });
 
