@@ -222,68 +222,124 @@ async function test3XuiConnection() {
 
 async function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, expiryDateStr = null) {
   const { xuiUrl, xuiUser, xuiPass } = getXuiConfig();
-  if (!xuiUrl || !inboundId) return false;
+  let apiSuccess = false;
 
-  try {
-    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
-    if (!sessionData) return false;
+  // 1. Perform HTTP API Call to 3X-UI
+  if (xuiUrl && inboundId) {
+    try {
+      const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+      if (sessionData) {
+        const isHttps = xuiUrl.startsWith('https:');
+        const transport = isHttps ? https : http;
 
-    const isHttps = xuiUrl.startsWith('https:');
-    const transport = isHttps ? https : http;
+        const addClientUrl = new URL(`${xuiUrl}/panel/api/inbounds/addClient`);
+        const expMs = expiryDateStr ? new Date(expiryDateStr + "T23:59:59").getTime() : 0;
+        const totalBytes = maxDataGb > 0 ? Math.round(maxDataGb * 1024 * 1024 * 1024) : 0;
 
-    const addClientUrl = new URL(`${xuiUrl}/panel/api/inbounds/addClient`);
-    const expMs = expiryDateStr ? new Date(expiryDateStr + "T23:59:59").getTime() : 0;
-    const totalBytes = maxDataGb > 0 ? Math.round(maxDataGb * 1024 * 1024 * 1024) : 0;
-
-    const payload = JSON.stringify({
-      id: parseInt(inboundId, 10),
-      settings: JSON.stringify({
-        clients: [{
-          id: clientUuid,
-          email: emailTag,
-          limitIp: 0,
-          totalGB: totalBytes,
-          expiryTime: expMs,
-          enable: true,
-          tgId: "",
-          subId: ""
-        }]
-      })
-    });
-
-    const headers = buildXuiAuthHeaders(sessionData);
-    headers['Content-Length'] = Buffer.byteLength(payload);
-
-    const result = await new Promise((resolve) => {
-      const opts = {
-        method: 'POST',
-        headers: headers,
-        timeout: 5000
-      };
-      if (isHttps) opts.rejectUnauthorized = false;
-
-      const req = transport.request(addClientUrl, opts, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(body);
-            resolve(Boolean(parsed && parsed.success));
-          } catch (e) {
-            resolve(false);
-          }
+        const payload = JSON.stringify({
+          id: parseInt(inboundId, 10),
+          settings: JSON.stringify({
+            clients: [{
+              id: clientUuid,
+              email: emailTag,
+              limitIp: 0,
+              totalGB: totalBytes,
+              expiryTime: expMs,
+              enable: true,
+              tgId: "",
+              subId: ""
+            }]
+          })
         });
-      });
-      req.on('error', () => resolve(false));
-      req.on('timeout', () => { req.destroy(); resolve(false); });
-      req.write(payload);
-      req.end();
-    });
 
-    return result;
-  } catch (e) {
-    return false;
+        const headers = buildXuiAuthHeaders(sessionData);
+        headers['Content-Length'] = Buffer.byteLength(payload);
+
+        apiSuccess = await new Promise((resolve) => {
+          const opts = {
+            method: 'POST',
+            headers: headers,
+            timeout: 5000
+          };
+          if (isHttps) opts.rejectUnauthorized = false;
+
+          const req = transport.request(addClientUrl, opts, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+              try {
+                const parsed = JSON.parse(body);
+                resolve(Boolean(parsed && parsed.success));
+              } catch (e) {
+                resolve(false);
+              }
+            });
+          });
+          req.on('error', () => resolve(false));
+          req.on('timeout', () => { req.destroy(); resolve(false); });
+          req.write(payload);
+          req.end();
+        });
+      }
+    } catch (e) {}
   }
+
+  // 2. Also populate 3X-UI v3's client tables (clients, client_inbounds, client_traffics) in x-ui.db
+  const dbPath = findXuiDbPath();
+  if (dbPath && fs.existsSync(dbPath) && inboundId) {
+    try {
+      const xuiDb = new Database(dbPath);
+      let row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE id = ?').get(inboundId);
+      if (!row) {
+        row = xuiDb.prepare('SELECT id, settings FROM inbounds WHERE port = ?').get(inboundId);
+      }
+
+      if (row) {
+        const realInboundId = row.id;
+        const expMs = expiryDateStr ? new Date(expiryDateStr + "T23:59:59").getTime() : 0;
+        const totalBytes = maxDataGb > 0 ? Math.round(maxDataGb * 1024 * 1024 * 1024) : 0;
+
+        // 1. Update/Insert in 'clients' table
+        let clientId;
+        const clientRow = xuiDb.prepare('SELECT id FROM clients WHERE email = ?').get(emailTag);
+        if (clientRow) {
+          clientId = clientRow.id;
+          xuiDb.prepare('UPDATE clients SET uuid = ?, total_gb = ?, expiry_time = ?, enable = 1 WHERE id = ?')
+            .run(clientUuid, totalBytes, expMs, clientId);
+        } else {
+          try {
+            const ins = xuiDb.prepare('INSERT INTO clients (email, uuid, total_gb, expiry_time, enable, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)')
+              .run(emailTag, clientUuid, totalBytes, expMs, Date.now(), Date.now());
+            clientId = ins.lastInsertRowid;
+          } catch (e) {}
+        }
+
+        // 2. Link in 'client_inbounds' junction table
+        if (clientId) {
+          try {
+            xuiDb.prepare('INSERT OR REPLACE INTO client_inbounds (client_id, inbound_id, created_at) VALUES (?, ?, ?)')
+              .run(clientId, realInboundId, Date.now());
+          } catch (e) {}
+        }
+
+        // 3. Insert/Update in 'client_traffics' table
+        try {
+          const trafficRow = xuiDb.prepare('SELECT id FROM client_traffics WHERE email = ?').get(emailTag);
+          if (trafficRow) {
+            xuiDb.prepare('UPDATE client_traffics SET inbound_id = ?, total = ?, expiry_time = ?, enable = 1 WHERE email = ?')
+              .run(realInboundId, totalBytes, expMs, emailTag);
+          } else {
+            xuiDb.prepare('INSERT INTO client_traffics (inbound_id, enable, email, up, down, expiry_time, total) VALUES (?, 1, ?, 0, 0, ?, ?)')
+              .run(realInboundId, emailTag, expMs, totalBytes);
+          }
+        } catch (e) {}
+      }
+
+      xuiDb.close();
+    } catch (e) {}
+  }
+
+  return apiSuccess;
 }
 
 async function removeClientFromXuiInbound(inboundId, emailTag) {
