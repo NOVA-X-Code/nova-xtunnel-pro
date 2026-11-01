@@ -365,7 +365,7 @@ router.post('/config-templates/:id/edit', (req, res) => {
 
 router.post('/app-settings', (req, res) => {
   try {
-    const { update_message, app_version, default_ssh_user, default_ssh_pass, default_zivpn_pass } = req.body;
+    const { update_message, app_version, default_ssh_user, default_ssh_pass, default_zivpn_pass, xui_url, xui_username, xui_password } = req.body;
     db.prepare("INSERT INTO app_settings (key, value) VALUES ('update_message', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(update_message || '');
     if (app_version) {
       db.prepare("INSERT INTO app_settings (key, value) VALUES ('app_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(app_version);
@@ -378,6 +378,15 @@ router.post('/app-settings', (req, res) => {
     }
     if (default_zivpn_pass) {
       db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_zivpn_pass', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(default_zivpn_pass.trim());
+    }
+    if (xui_url) {
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('xui_url', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(xui_url.trim());
+    }
+    if (xui_username) {
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('xui_username', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(xui_username.trim());
+    }
+    if (xui_password) {
+      db.prepare("INSERT INTO app_settings (key, value) VALUES ('xui_password', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(xui_password.trim());
     }
 
     // Provision on Linux immediately

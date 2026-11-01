@@ -240,6 +240,21 @@
             </div>
           </div>
 
+          <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; margin-bottom:10px; border-top:1px solid var(--border); padding-top:10px;">
+            <div>
+              <label style="font-size:11px; color:#38BDF8;">URL API Panel 3X-UI</label>
+              <input type="text" name="xui_url" value="<%= (typeof appSettings !== 'undefined' && appSettings.xui_url) ? appSettings.xui_url : 'http://127.0.0.1:2053' %>" placeholder="http://127.0.0.1:2053" class="form-control" style="font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:11px; color:#38BDF8;">User 3X-UI</label>
+              <input type="text" name="xui_username" value="<%= (typeof appSettings !== 'undefined' && appSettings.xui_username) ? appSettings.xui_username : 'admin' %>" placeholder="admin" class="form-control" style="font-size:12px;" />
+            </div>
+            <div>
+              <label style="font-size:11px; color:#38BDF8;">Mdp 3X-UI</label>
+              <input type="password" name="xui_password" value="<%= (typeof appSettings !== 'undefined' && appSettings.xui_password) ? appSettings.xui_password : 'admin' %>" placeholder="admin" class="form-control" style="font-size:12px;" />
+            </div>
+          </div>
+
           <div style="text-align:right;">
             <button type="submit" class="btn-glow btn-glow-primary" style="padding:6px 14px; font-size:12px;">Enregistrer & Synchroniser</button>
           </div>

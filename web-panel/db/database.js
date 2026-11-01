@@ -191,6 +191,9 @@ try {
   db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_ssh_user', 'NOSTRA') ON CONFLICT(key) DO NOTHING").run();
   db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_ssh_pass', '@LaBoKingFreeSurf') ON CONFLICT(key) DO NOTHING").run();
   db.prepare("INSERT INTO app_settings (key, value) VALUES ('default_zivpn_pass', '@LaBoKingFreeSurf') ON CONFLICT(key) DO NOTHING").run();
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('xui_url', 'http://127.0.0.1:2053') ON CONFLICT(key) DO NOTHING").run();
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('xui_username', 'admin') ON CONFLICT(key) DO NOTHING").run();
+  db.prepare("INSERT INTO app_settings (key, value) VALUES ('xui_password', 'admin') ON CONFLICT(key) DO NOTHING").run();
 } catch (e) {}
 
 // Auto-Migration: Update existing base config templates to use 'NOSTRA' and '@LaBoKingFreeSurf'

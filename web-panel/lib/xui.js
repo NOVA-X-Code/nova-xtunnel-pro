@@ -1,5 +1,7 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
 const { execSync } = require('child_process');
 
 function findXuiDbPath() {
@@ -15,12 +17,131 @@ function findXuiDbPath() {
   return null;
 }
 
+function getXuiApiCredentials() {
+  const db = require('../db/database');
+  let xuiUrl = 'http://127.0.0.1:2053';
+  let xuiUser = 'admin';
+  let xuiPass = 'admin';
+
+  try {
+    const urlRow = db.prepare("SELECT value FROM app_settings WHERE key = 'xui_url'").get();
+    const userRow = db.prepare("SELECT value FROM app_settings WHERE key = 'xui_username'").get();
+    const passRow = db.prepare("SELECT value FROM app_settings WHERE key = 'xui_password'").get();
+
+    if (urlRow && urlRow.value) xuiUrl = urlRow.value.trim();
+    if (userRow && userRow.value) xuiUser = userRow.value.trim();
+    if (passRow && passRow.value) xuiPass = passRow.value.trim();
+  } catch (e) {}
+
+  return { xuiUrl, xuiUser, xuiPass };
+}
+
+async function addClientViaXuiApi(inboundId, clientUuid, emailTag, maxDataGb = 0, expiryDateStr = null) {
+  const { xuiUrl, xuiUser, xuiPass } = getXuiApiCredentials();
+  if (!xuiUrl || !inboundId) return false;
+
+  try {
+    const baseUrlClean = xuiUrl.replace(/\/$/, '');
+    const loginUrl = new URL(`${baseUrlClean}/login`);
+    const postData = `username=${encodeURIComponent(xuiUser)}&password=${encodeURIComponent(xuiPass)}`;
+
+    const isHttps = loginUrl.protocol === 'https:';
+    const transport = isHttps ? https : http;
+
+    // 1. Perform HTTP Login to 3X-UI
+    const loginCookie = await new Promise((resolve) => {
+      const opts = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData)
+        },
+        timeout: 5000
+      };
+      if (isHttps) opts.rejectUnauthorized = false;
+
+      const req = transport.request(loginUrl, opts, (res) => {
+        const cookies = res.headers['set-cookie'];
+        if (cookies && cookies.length > 0) {
+          resolve(cookies.join('; '));
+        } else {
+          resolve(null);
+        }
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+      req.write(postData);
+      req.end();
+    });
+
+    if (!loginCookie) return false;
+
+    // 2. Call /panel/api/inbounds/addClient
+    const addClientUrl = new URL(`${baseUrlClean}/panel/api/inbounds/addClient`);
+    const expMs = expiryDateStr ? new Date(expiryDateStr + "T23:59:59").getTime() : 0;
+    const totalBytes = maxDataGb > 0 ? Math.round(maxDataGb * 1024 * 1024 * 1024) : 0;
+
+    const payload = JSON.stringify({
+      id: parseInt(inboundId, 10),
+      settings: JSON.stringify({
+        clients: [{
+          id: clientUuid,
+          email: emailTag,
+          limitIp: 0,
+          totalGB: totalBytes,
+          expiryTime: expMs,
+          enable: true,
+          tgId: "",
+          subId: ""
+        }]
+      })
+    });
+
+    const apiSuccess = await new Promise((resolve) => {
+      const opts = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': loginCookie,
+          'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 5000
+      };
+      if (isHttps) opts.rejectUnauthorized = false;
+
+      const req = transport.request(addClientUrl, opts, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve(Boolean(parsed && parsed.success));
+          } catch (e) {
+            resolve(false);
+          }
+        });
+      });
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.write(payload);
+      req.end();
+    });
+
+    return apiSuccess;
+  } catch (e) {
+    return false;
+  }
+}
+
 function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, expiryDateStr = null) {
   const dbPath = findXuiDbPath();
   if (!dbPath || !inboundId) return false;
 
+  // Try HTTP API sync first if credentials/URL work
+  addClientViaXuiApi(inboundId, clientUuid, emailTag, maxDataGb, expiryDateStr).catch(() => {});
+
   try {
-    // 1. Stop x-ui process temporarily to prevent memory cache overwrite
+    // Stop x-ui process temporarily to prevent memory cache overwrite
     try { execSync('systemctl stop x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
 
     const xuiDb = new Database(dbPath);
@@ -82,7 +203,7 @@ function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, e
 
     xuiDb.close();
 
-    // 2. Start x-ui service so it loads the updated database fresh into memory
+    // Start x-ui service so it loads the updated database fresh into memory
     try { execSync('systemctl start x-ui 2>/dev/null || systemctl restart x-ui 2>/dev/null', { stdio: 'ignore' }); } catch (e) {}
     return true;
   } catch (e) {

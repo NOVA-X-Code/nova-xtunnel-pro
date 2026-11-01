@@ -220,7 +220,7 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
 
   const defaultMsg = `<b>★ Code Premium Actif</b><br/>Code: ${accessCode.code}${accessCode.client_reference ? ' (' + accessCode.client_reference + ')' : ''}<br/>Data: ${accessCode.consumed_data_gb.toFixed(2)} Go / ${accessCode.max_data_gb > 0 ? accessCode.max_data_gb + ' Go' : 'Illimité'}`;
   const updateMsg = (customUpdateMsgRow && customUpdateMsgRow.value) ? customUpdateMsgRow.value : defaultMsg;
-  const appVersion = (customVersionRow && customVersionRow.value) ? customVersionRow.value : "1.0.5";
+  const appVersion = (customVersionRow && customVersionRow.value) ? customVersionRow.value : "1.1";
 
   const fullConfigJson = {
     Version: appVersion,
