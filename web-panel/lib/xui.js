@@ -106,6 +106,60 @@ async function loginToXui(xuiUrl, xuiUser, xuiPass) {
   }
 }
 
+async function test3XuiConnection() {
+  const { xuiUrl, xuiUser, xuiPass } = getXuiConfig();
+  if (!xuiUrl) return { success: false, message: "URL 3X-UI non configurée." };
+
+  try {
+    const cookie = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!cookie) {
+      return { success: false, message: `Échec d'authentification 3X-UI sur ${xuiUrl} (Nom d'utilisateur: ${xuiUser}). Vérifiez l'URL, l'utilisateur et le mot de passe.` };
+    }
+
+    const isHttps = xuiUrl.startsWith('https:');
+    const transport = isHttps ? https : http;
+    const baseUrlClean = xuiUrl.replace(/\/$/, '');
+    const listUrl = new URL(`${baseUrlClean}/panel/api/inbounds/list`);
+
+    const listResult = await new Promise((resolve) => {
+      const opts = {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Cookie': cookie
+        },
+        timeout: 5000
+      };
+      if (isHttps) opts.rejectUnauthorized = false;
+
+      const req = transport.request(listUrl, opts, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve(parsed);
+          } catch (e) {
+            resolve(null);
+          }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+      req.end();
+    });
+
+    if (listResult && listResult.success) {
+      const count = Array.isArray(listResult.obj) ? listResult.obj.length : 0;
+      return { success: true, message: `✅ Connexion 3X-UI réussie ! (${count} inbounds XRay détectés sur ${xuiUrl})` };
+    } else {
+      return { success: true, message: `✅ Connexion 3X-UI réussie ! (Authentification OK sur ${xuiUrl})` };
+    }
+  } catch (e) {
+    return { success: false, message: `Erreur de connexion 3X-UI : ${e.message}` };
+  }
+}
+
 async function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb = 0, expiryDateStr = null) {
   const { xuiUrl, xuiUser, xuiPass } = getXuiConfig();
   if (!xuiUrl || !inboundId) return false;
@@ -277,6 +331,7 @@ async function getClientTrafficFromXui(emailTag) {
 }
 
 module.exports = {
+  test3XuiConnection,
   addClientToXuiInbound,
   removeClientFromXuiInbound,
   getClientTrafficFromXui,

@@ -413,6 +413,20 @@ router.post('/app-settings', (req, res) => {
   }
 });
 
+router.post('/test-3xui', async (req, res) => {
+  try {
+    const xuiLib = require('../lib/xui');
+    const result = await xuiLib.test3XuiConnection();
+    if (result.success) {
+      res.redirect('/admin/access-codes?success=' + encodeURIComponent(result.message));
+    } else {
+      res.redirect('/admin/access-codes?error=' + encodeURIComponent(result.message));
+    }
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
 router.post('/config-templates/:id/delete', (req, res) => {
   try {
     db.prepare('DELETE FROM config_templates WHERE id = ?').run(req.params.id);

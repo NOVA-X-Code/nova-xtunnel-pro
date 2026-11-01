@@ -255,10 +255,12 @@
             </div>
           </div>
 
-          <div style="text-align:right;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+            <button type="button" class="btn-ghost small" style="color:#38BDF8;" onclick="document.getElementById('formTestXui').submit();">🧪 Tester Connexion 3X-UI</button>
             <button type="submit" class="btn-glow btn-glow-primary" style="padding:6px 14px; font-size:12px;">Enregistrer & Synchroniser</button>
           </div>
         </form>
+        <form method="POST" action="/admin/test-3xui" id="formTestXui" style="display:none;"></form>
       </div>
     </div>
 
