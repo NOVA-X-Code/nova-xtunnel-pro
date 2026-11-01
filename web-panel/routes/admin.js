@@ -444,11 +444,17 @@ router.post('/access-codes', (req, res) => {
     const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
 
     const templateMaxDataGbs = {};
+    const customUuids = {};
     if (req.body) {
       Object.keys(req.body).forEach(k => {
         if (k.startsWith('template_max_gb_')) {
           const tId = k.replace('template_max_gb_', '');
           templateMaxDataGbs[tId] = parseFloat(req.body[k]) || 0;
+        } else if (k.startsWith('custom_uuid_')) {
+          const tId = k.replace('custom_uuid_', '');
+          if (req.body[k] && req.body[k].trim().length > 0) {
+            customUuids[tId] = req.body[k].trim();
+          }
         }
       });
     }
@@ -459,7 +465,8 @@ router.post('/access-codes', (req, res) => {
       maxDataGb: parseFloat(maxDataGb) || 20,
       expiryDays: parseInt(expiryDays, 10) || 30,
       selectedTemplateIds: templatesList,
-      templateMaxDataGbs
+      templateMaxDataGbs,
+      customUuids
     });
 
     if (hwid && hwid.trim().length > 0) {

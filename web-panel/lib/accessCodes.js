@@ -1,21 +1,23 @@
 const db = require('../db/database');
-const crypto = require('crypto');
 const cryptoLib = require('./crypto');
+const crypto = require('crypto');
+
+function generateRandomPassword(len = 8) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let pass = '';
+  for (let i = 0; i < len; i++) {
+    pass += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return pass;
+}
 
 function generateRandomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'NOVA-';
-  for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-  code += '-';
-  for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-  return code;
+  const p1 = crypto.randomBytes(2).toString('hex').toUpperCase();
+  const p2 = crypto.randomBytes(2).toString('hex').toUpperCase();
+  return `NOVA-${p1}-${p2}`;
 }
 
-function generateRandomPassword() {
-  return crypto.randomBytes(6).toString('hex');
-}
-
-function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {} }) {
+function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {}, customUuids = {} }) {
   const code = generateRandomCode();
   const validDays = parseInt(expiryDays, 10) || 30;
 
@@ -26,7 +28,7 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     expiryDateStr = d.toISOString().split('T')[0];
   }
 
-  // Insert Access Code into Database (expiry_date calculated immediately upon generation)
+  // Insert Access Code into Database
   const result = db.prepare(`
     INSERT INTO access_codes (reseller_id, code, client_reference, max_data_gb, max_devices, expiry_days, expiry_date)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -44,14 +46,14 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
   let extraTemplates = [];
   if (selectedTemplateIds && selectedTemplateIds.length > 0) {
     const placeholders = selectedTemplateIds.map(() => '?').join(',');
-    extraTemplates = db.prepare(`SELECT * FROM config_templates WHERE id IN (${placeholders}) AND is_base_config = 0 AND is_global_premium = 0`).all(...selectedTemplateIds);
+    extraTemplates = db.prepare(`SELECT * FROM config_templates WHERE id IN (${placeholders}) AND is_base_config = 0`).all(...selectedTemplateIds);
   }
 
   // Deduplicate templates by ID
   const map = new Map();
   [...baseTemplates, ...globalTemplates, ...extraTemplates].forEach(t => map.set(t.id, t));
 
-  // If no templates were found via base/global/extra, fallback to all available templates
+  // If no templates were found, fallback to all available templates
   if (map.size === 0) {
     const fallbackTemplates = db.prepare('SELECT * FROM config_templates').all();
     fallbackTemplates.forEach(t => map.set(t.id, t));
@@ -69,11 +71,13 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     let clientPassword = t.default_pass || 'nxt_pass';
     const clientEmailTag = `code_${code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
 
-    // Specific template data limit if provided, otherwise fallback to template max_data_gb or global maxDataGb
     const specificDataGb = parseFloat(templateMaxDataGbs[t.id]) || 0;
+    const explicitUuid = (customUuids[t.id] && customUuids[t.id].trim().length > 0) ? customUuids[t.id].trim() : null;
 
-    // Apply auto_generate rule:
-    if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
+    if (explicitUuid) {
+      clientUuidOrUser = explicitUuid;
+      clientPassword = null;
+    } else if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
       if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol.toUpperCase().startsWith('XRAY_')) {
         clientUuidOrUser = masterUuid;
         clientPassword = null;
@@ -87,15 +91,6 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
       INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag, template_max_data_gb)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(accessCodeId, t.id, t.xray_inbound_id || null, clientUuidOrUser, clientPassword, clientEmailTag, specificDataGb);
-
-    // Sync to 3X-UI inbound database if xray_inbound_id is set
-    if (t.xray_inbound_id) {
-      try {
-        const xuiLib = require('./xui');
-        const effectiveGb = specificDataGb > 0 ? specificDataGb : maxDataGb;
-        xuiLib.addClientToXuiInbound(t.xray_inbound_id, clientUuidOrUser, clientEmailTag, effectiveGb, expiryDateStr);
-      } catch (err) {}
-    }
   }
 
   return { accessCodeId, code, maxDataGb, expiryDays: validDays };
@@ -128,7 +123,6 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
     throw new Error(`Access Code Inactive: Status is ${accessCode.status}`);
   }
 
-  // Contrôle d'expiration fixe côté serveur (créée dès la génération du code)
   if (accessCode.expiry_date) {
     const expTime = new Date(accessCode.expiry_date + "T23:59:59").getTime();
     if (Date.now() > expTime) {
@@ -198,29 +192,30 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
     }
 
     // XRAY modes (v2rayLink)
-    if (c.protocol.toUpperCase().startsWith('XRAY_') || c.protocol === 'vless' || c.protocol === 'vmess' || c.protocol === 'trojan') {
-      let rawLink = c.v2ray_link || '';
-      if (c.is_customizable === 1 && rawLink) {
-        // Replace UUID placeholder inside v2rayLink with client's master UUID
-        rawLink = rawLink.replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/, c.client_uuid_or_user);
+    if (c.v2ray_link && c.v2ray_link.trim().length > 0) {
+      let finalLink = c.v2ray_link.trim();
+      if (c.client_uuid_or_user && c.client_uuid_or_user.length > 10) {
+        finalLink = finalLink.replace(/vless:\/\/[^@]+@/i, `vless://${c.client_uuid_or_user}@`)
+                             .replace(/vmess:\/\/[^@]+@/i, `vmess://${c.client_uuid_or_user}@`)
+                             .replace(/trojan:\/\/[^@]+@/i, `trojan://${c.client_uuid_or_user}@`);
       }
-      serverObj.v2rayLink = rawLink;
+      serverObj.v2rayLink = finalLink;
     }
 
     servers.push(serverObj);
   }
 
-  const maxBytes = Math.round(accessCode.max_data_gb * 1024 * 1024 * 1024);
-  const usedBytes = Math.round(accessCode.consumed_data_gb * 1024 * 1024 * 1024);
-  const expTimestamp = accessCode.expiry_date ? new Date(accessCode.expiry_date + "T23:59:59").getTime() : 0;
-
   const activeNotif = db.prepare('SELECT * FROM broadcast_notifications WHERE is_active = 1 ORDER BY id DESC LIMIT 1').get();
   const customUpdateMsgRow = db.prepare("SELECT value FROM app_settings WHERE key = 'update_message'").get();
   const customVersionRow = db.prepare("SELECT value FROM app_settings WHERE key = 'app_version'").get();
 
+  const expTimestamp = accessCode.expiry_date ? new Date(accessCode.expiry_date + "T23:59:59").getTime() : 0;
+  const usedBytes = Math.round((accessCode.consumed_data_gb || 0) * 1024 * 1024 * 1024);
+  const maxBytes = Math.round((accessCode.max_data_gb || 0) * 1024 * 1024 * 1024);
+
   const defaultMsg = `<b>★ Code Premium Actif</b><br/>Code: ${accessCode.code}${accessCode.client_reference ? ' (' + accessCode.client_reference + ')' : ''}<br/>Data: ${accessCode.consumed_data_gb.toFixed(2)} Go / ${accessCode.max_data_gb > 0 ? accessCode.max_data_gb + ' Go' : 'Illimité'}`;
   const updateMsg = (customUpdateMsgRow && customUpdateMsgRow.value) ? customUpdateMsgRow.value : defaultMsg;
-  const appVersion = (customVersionRow && customVersionRow.value) ? customVersionRow.value : "1.1";
+  const appVersion = (customVersionRow && customVersionRow.value) ? customVersionRow.value : "1.0.5";
 
   const fullConfigJson = {
     Version: appVersion,
@@ -256,17 +251,12 @@ function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templ
 
   const desiredIds = new Set([...baseIds, ...selectedTemplateIds.map(id => parseInt(id, 10))]);
 
-  const currentCreds = db.prepare('SELECT id, config_template_id, xray_inbound_id, client_email_tag FROM code_credentials WHERE access_code_id = ?').all(accessCodeId);
+  const currentCreds = db.prepare('SELECT id, config_template_id FROM code_credentials WHERE access_code_id = ?').all(accessCodeId);
   const currentMap = new Map();
   currentCreds.forEach(cr => currentMap.set(cr.config_template_id, cr));
 
-  const xuiLib = require('./xui');
-
   for (const [tmplId, cr] of currentMap.entries()) {
     if (!desiredIds.has(tmplId)) {
-      if (cr.xray_inbound_id && cr.client_email_tag) {
-        try { xuiLib.removeClientFromXuiInbound(cr.xray_inbound_id, cr.client_email_tag); } catch (e) {}
-      }
       db.prepare('DELETE FROM code_credentials WHERE id = ?').run(cr.id);
     }
   }
@@ -303,13 +293,6 @@ function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templ
         INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag, template_max_data_gb)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(accessCodeId, t.id, t.xray_inbound_id || null, clientUuidOrUser, clientPassword, clientEmailTag, specificDataGb);
-
-      if (t.xray_inbound_id) {
-        try {
-          const effectiveGb = specificDataGb > 0 ? specificDataGb : codeRow.max_data_gb;
-          xuiLib.addClientToXuiInbound(t.xray_inbound_id, clientUuidOrUser, clientEmailTag, effectiveGb, codeRow.expiry_date);
-        } catch (err) {}
-      }
     }
   }
 }
