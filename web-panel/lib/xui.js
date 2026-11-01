@@ -69,41 +69,102 @@ function getXuiConfig() {
   return { xuiUrl: finalUrl.replace(/\/$/, ''), xuiUser: finalUser, xuiPass: finalPass };
 }
 
-async function loginToXui(xuiUrl, xuiUser, xuiPass) {
-  try {
-    const loginUrl = new URL(`${xuiUrl}/login`);
-    const postData = `username=${encodeURIComponent(xuiUser)}&password=${encodeURIComponent(xuiPass)}`;
+async function doLoginRequest(loginUrl, postData, contentType) {
+  const isHttps = loginUrl.protocol === 'https:';
+  const transport = isHttps ? https : http;
 
-    const isHttps = loginUrl.protocol === 'https:';
-    const transport = isHttps ? https : http;
+  return await new Promise((resolve) => {
+    const opts = {
+      method: 'POST',
+      headers: {
+        'Content-Type': contentType,
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 5000
+    };
+    if (isHttps) opts.rejectUnauthorized = false;
 
-    return await new Promise((resolve) => {
-      const opts = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': Buffer.byteLength(postData)
-        },
-        timeout: 5000
-      };
-      if (isHttps) opts.rejectUnauthorized = false;
+    const req = transport.request(loginUrl, opts, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        let cookie = null;
+        let token = null;
 
-      const req = transport.request(loginUrl, opts, (res) => {
         const cookies = res.headers['set-cookie'];
         if (cookies && cookies.length > 0) {
-          resolve(cookies.join('; '));
+          cookie = cookies.join('; ');
+        }
+
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed) {
+            if (typeof parsed.token === 'string') token = parsed.token;
+            else if (parsed.obj && typeof parsed.obj.token === 'string') token = parsed.obj.token;
+            else if (typeof parsed.obj === 'string' && parsed.obj.length > 10) token = parsed.obj;
+          }
+        } catch (e) {}
+
+        if (cookie || token) {
+          resolve({ cookie, token });
         } else {
           resolve(null);
         }
       });
-      req.on('error', () => resolve(null));
-      req.on('timeout', () => { req.destroy(); resolve(null); });
-      req.write(postData);
-      req.end();
     });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.write(postData);
+    req.end();
+  });
+}
+
+async function loginToXui(xuiUrl, xuiUser, xuiPass) {
+  try {
+    const loginUrl = new URL(`${xuiUrl.replace(/\/$/, '')}/login`);
+
+    // Attempt 1: x-www-form-urlencoded with provided credentials
+    const formBody = `username=${encodeURIComponent(xuiUser)}&password=${encodeURIComponent(xuiPass)}`;
+    let sessionData = await doLoginRequest(loginUrl, formBody, 'application/x-www-form-urlencoded');
+    if (sessionData) return sessionData;
+
+    // Attempt 2: application/json with provided credentials
+    const jsonBody = JSON.stringify({ username: xuiUser, password: xuiPass });
+    sessionData = await doLoginRequest(loginUrl, jsonBody, 'application/json');
+    if (sessionData) return sessionData;
+
+    // Attempt 3: Read exact credentials from local 3X-UI SQLite database
+    const dbPath = findXuiDbPath();
+    if (dbPath && fs.existsSync(dbPath)) {
+      try {
+        const xuiDb = new Database(dbPath, { readonly: true });
+        const userRow = xuiDb.prepare('SELECT username, password FROM users LIMIT 1').get();
+        xuiDb.close();
+        if (userRow && (userRow.username !== xuiUser || userRow.password !== xuiPass)) {
+          const dbFormBody = `username=${encodeURIComponent(userRow.username)}&password=${encodeURIComponent(userRow.password)}`;
+          sessionData = await doLoginRequest(loginUrl, dbFormBody, 'application/x-www-form-urlencoded');
+          if (sessionData) return sessionData;
+        }
+      } catch (e) {}
+    }
+
+    return null;
   } catch (e) {
     return null;
   }
+}
+
+function buildXuiAuthHeaders(sessionData) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+  if (sessionData) {
+    if (sessionData.cookie) headers['Cookie'] = sessionData.cookie;
+    if (sessionData.token) headers['Authorization'] = `Bearer ${sessionData.token}`;
+  }
+  return headers;
 }
 
 async function test3XuiConnection() {
@@ -111,8 +172,8 @@ async function test3XuiConnection() {
   if (!xuiUrl) return { success: false, message: "URL 3X-UI non configurée." };
 
   try {
-    const cookie = await loginToXui(xuiUrl, xuiUser, xuiPass);
-    if (!cookie) {
+    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!sessionData) {
       return { success: false, message: `Échec d'authentification 3X-UI sur ${xuiUrl} (Nom d'utilisateur: ${xuiUser}). Vérifiez l'URL, l'utilisateur et le mot de passe.` };
     }
 
@@ -121,13 +182,12 @@ async function test3XuiConnection() {
     const baseUrlClean = xuiUrl.replace(/\/$/, '');
     const listUrl = new URL(`${baseUrlClean}/panel/api/inbounds/list`);
 
+    const headers = buildXuiAuthHeaders(sessionData);
+
     const listResult = await new Promise((resolve) => {
       const opts = {
         method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Cookie': cookie
-        },
+        headers: headers,
         timeout: 5000
       };
       if (isHttps) opts.rejectUnauthorized = false;
@@ -165,11 +225,8 @@ async function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb 
   if (!xuiUrl || !inboundId) return false;
 
   try {
-    const cookie = await loginToXui(xuiUrl, xuiUser, xuiPass);
-    if (!cookie) {
-      console.log('3X-UI Login failed for:', xuiUrl);
-      return false;
-    }
+    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!sessionData) return false;
 
     const isHttps = xuiUrl.startsWith('https:');
     const transport = isHttps ? https : http;
@@ -194,14 +251,13 @@ async function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb 
       })
     });
 
+    const headers = buildXuiAuthHeaders(sessionData);
+    headers['Content-Length'] = Buffer.byteLength(payload);
+
     const result = await new Promise((resolve) => {
       const opts = {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cookie': cookie,
-          'Content-Length': Buffer.byteLength(payload)
-        },
+        headers: headers,
         timeout: 5000
       };
       if (isHttps) opts.rejectUnauthorized = false;
@@ -226,7 +282,6 @@ async function addClientToXuiInbound(inboundId, clientUuid, emailTag, maxDataGb 
 
     return result;
   } catch (e) {
-    console.log('3X-UI addClient error:', e.message);
     return false;
   }
 }
@@ -236,8 +291,8 @@ async function removeClientFromXuiInbound(inboundId, emailTag) {
   if (!xuiUrl || !emailTag) return false;
 
   try {
-    const cookie = await loginToXui(xuiUrl, xuiUser, xuiPass);
-    if (!cookie) return false;
+    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!sessionData) return false;
 
     const isHttps = xuiUrl.startsWith('https:');
     const transport = isHttps ? https : http;
@@ -247,14 +302,13 @@ async function removeClientFromXuiInbound(inboundId, emailTag) {
       inboundIds: inboundId ? [parseInt(inboundId, 10)] : []
     });
 
+    const headers = buildXuiAuthHeaders(sessionData);
+    headers['Content-Length'] = Buffer.byteLength(payload);
+
     return await new Promise((resolve) => {
       const opts = {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cookie': cookie,
-          'Content-Length': Buffer.byteLength(payload)
-        },
+        headers: headers,
         timeout: 5000
       };
       if (isHttps) opts.rejectUnauthorized = false;
@@ -281,26 +335,110 @@ async function removeClientFromXuiInbound(inboundId, emailTag) {
   }
 }
 
+async function resetInboundTrafficInXui(inboundId) {
+  const { xuiUrl, xuiUser, xuiPass } = getXuiConfig();
+  if (!xuiUrl || !inboundId) return false;
+
+  try {
+    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!sessionData) return false;
+
+    const isHttps = xuiUrl.startsWith('https:');
+    const transport = isHttps ? https : http;
+
+    const resetUrl = new URL(`${xuiUrl}/panel/api/inbounds/${parseInt(inboundId, 10)}/resetTraffic`);
+    const headers = buildXuiAuthHeaders(sessionData);
+
+    return await new Promise((resolve) => {
+      const opts = {
+        method: 'POST',
+        headers: headers,
+        timeout: 5000
+      };
+      if (isHttps) opts.rejectUnauthorized = false;
+
+      const req = transport.request(resetUrl, opts, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve(Boolean(parsed && parsed.success));
+          } catch (e) {
+            resolve(false);
+          }
+        });
+      });
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.end();
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
+async function deleteAllClientsFromXuiInbound(inboundId) {
+  const { xuiUrl, xuiUser, xuiPass } = getXuiConfig();
+  if (!xuiUrl || !inboundId) return false;
+
+  try {
+    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!sessionData) return false;
+
+    const isHttps = xuiUrl.startsWith('https:');
+    const transport = isHttps ? https : http;
+
+    const delAllUrl = new URL(`${xuiUrl}/panel/api/inbounds/${parseInt(inboundId, 10)}/delAllClients`);
+    const headers = buildXuiAuthHeaders(sessionData);
+
+    return await new Promise((resolve) => {
+      const opts = {
+        method: 'POST',
+        headers: headers,
+        timeout: 5000
+      };
+      if (isHttps) opts.rejectUnauthorized = false;
+
+      const req = transport.request(delAllUrl, opts, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve(Boolean(parsed && parsed.success));
+          } catch (e) {
+            resolve(false);
+          }
+        });
+      });
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.end();
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
 async function getClientTrafficFromXui(emailTag) {
   const { xuiUrl, xuiUser, xuiPass } = getXuiConfig();
   if (!xuiUrl || !emailTag) return null;
 
   try {
-    const cookie = await loginToXui(xuiUrl, xuiUser, xuiPass);
-    if (!cookie) return null;
+    const sessionData = await loginToXui(xuiUrl, xuiUser, xuiPass);
+    if (!sessionData) return null;
 
     const isHttps = xuiUrl.startsWith('https:');
     const transport = isHttps ? https : http;
 
     const trafficUrl = new URL(`${xuiUrl}/panel/api/clients/traffic/${encodeURIComponent(emailTag)}`);
+    const headers = buildXuiAuthHeaders(sessionData);
 
     return await new Promise((resolve) => {
       const opts = {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Cookie': cookie
-        },
+        headers: headers,
         timeout: 5000
       };
       if (isHttps) opts.rejectUnauthorized = false;
@@ -334,6 +472,8 @@ module.exports = {
   test3XuiConnection,
   addClientToXuiInbound,
   removeClientFromXuiInbound,
+  resetInboundTrafficInXui,
+  deleteAllClientsFromXuiInbound,
   getClientTrafficFromXui,
   findXuiDbPath,
   getXuiConfig
