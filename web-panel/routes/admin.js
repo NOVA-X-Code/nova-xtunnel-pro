@@ -439,7 +439,7 @@ router.post('/config-templates/:id/reset-quota', (req, res) => {
 router.post('/access-codes', (req, res) => {
   try {
     const accessCodesLib = require('../lib/accessCodes');
-    const { clientReference, maxDataGb, expiryDays, hwid, selectedTemplateIds } = req.body;
+    const { clientReference, maxDataGb, expiryDays, expiryDate, hwid, selectedTemplateIds } = req.body;
 
     const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
 
@@ -464,6 +464,7 @@ router.post('/access-codes', (req, res) => {
       clientReference: clientReference || '',
       maxDataGb: parseFloat(maxDataGb) || 20,
       expiryDays: parseInt(expiryDays, 10) || 30,
+      expiryDate: expiryDate ? expiryDate.trim() : null,
       selectedTemplateIds: templatesList,
       templateMaxDataGbs,
       customUuids
@@ -482,15 +483,15 @@ router.post('/access-codes', (req, res) => {
 
 router.post('/access-codes/:id/edit', (req, res) => {
   try {
-    const { clientReference, maxDataGb, expiryDays, hwid, status, selectedTemplateIds } = req.body;
+    const { clientReference, maxDataGb, expiryDays, expiryDate, hwid, status, selectedTemplateIds } = req.body;
     const codeId = req.params.id;
 
     const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeId);
     if (!codeRow) throw new Error("Code d'accès introuvable.");
 
-    let expiryDateStr = codeRow.expiry_date;
+    let expiryDateStr = expiryDate ? expiryDate.trim() : codeRow.expiry_date;
     const validDays = parseInt(expiryDays, 10);
-    if (!isNaN(validDays) && validDays > 0) {
+    if (!expiryDate && !isNaN(validDays) && validDays > 0) {
       const d = new Date();
       d.setDate(d.getDate() + validDays);
       expiryDateStr = d.toISOString().split('T')[0];
@@ -517,17 +518,23 @@ router.post('/access-codes/:id/edit', (req, res) => {
 
     const templatesList = Array.isArray(selectedTemplateIds) ? selectedTemplateIds : (selectedTemplateIds ? [selectedTemplateIds] : []);
     const templateMaxDataGbs = {};
+    const customUuids = {};
     if (req.body) {
       Object.keys(req.body).forEach(k => {
         if (k.startsWith('template_max_gb_')) {
           const tId = k.replace('template_max_gb_', '');
           templateMaxDataGbs[tId] = parseFloat(req.body[k]) || 0;
+        } else if (k.startsWith('custom_uuid_')) {
+          const tId = k.replace('custom_uuid_', '');
+          if (req.body[k] && req.body[k].trim().length > 0) {
+            customUuids[tId] = req.body[k].trim();
+          }
         }
       });
     }
 
     const accessCodesLib = require('../lib/accessCodes');
-    accessCodesLib.updateAccessCodeTemplates(codeId, templatesList, templateMaxDataGbs);
+    accessCodesLib.updateAccessCodeTemplates(codeId, templatesList, templateMaxDataGbs, customUuids);
 
     audit.log('admin', req.session.username, 'edit_access_code', `Code d'accès modifié : ${codeRow.code}`, null);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour avec succès.`));

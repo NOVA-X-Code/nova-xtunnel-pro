@@ -205,8 +205,8 @@
           </div>
 
           <div class="form-group">
-            <label>Prolonger Validité (Jours)</label>
-            <input type="number" name="expiryDays" id="editCodeExpiryDays" value="30" class="form-control" />
+            <label>Date d'Expiration Calendrier (`expiryDate`)</label>
+            <input type="date" name="expiryDate" id="resellerEditCodeExpiryDate" class="form-control" />
           </div>
         </div>
 
@@ -276,7 +276,7 @@
       document.getElementById('formEditCode').action = '/reseller/access-codes/' + c.id + '/edit';
       document.getElementById('editCodeClientRef').value = c.client_reference || '';
       document.getElementById('editCodeMaxDataGb').value = c.max_data_gb || 0;
-      document.getElementById('editCodeExpiryDays').value = c.expiry_days || 30;
+      document.getElementById('resellerEditCodeExpiryDate').value = c.expiry_date || '';
       document.getElementById('editCodeHwid').value = c.allowed_hwids || '';
       document.getElementById('editCodeStatus').value = c.status || 'active';
 

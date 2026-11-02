@@ -17,12 +17,18 @@ function generateRandomCode() {
   return `NOVA-${p1}-${p2}`;
 }
 
-function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {}, customUuids = {} }) {
+function extractUuidFromV2rayLink(v2rayLink) {
+  if (!v2rayLink) return '';
+  const match = v2rayLink.match(/v(less|mess|less|trojan):\/\/([^@]+)@/i);
+  return match ? match[2] : '';
+}
+
+function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, expiryDate = null, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {}, customUuids = {} }) {
   const code = generateRandomCode();
   const validDays = parseInt(expiryDays, 10) || 30;
 
-  let expiryDateStr = null;
-  if (validDays > 0) {
+  let expiryDateStr = expiryDate || null;
+  if (!expiryDateStr && validDays > 0) {
     const d = new Date();
     d.setDate(d.getDate() + validDays);
     expiryDateStr = d.toISOString().split('T')[0];
@@ -77,7 +83,7 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     if (explicitUuid) {
       clientUuidOrUser = explicitUuid;
       clientPassword = null;
-    } else if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
+    } else if (t.is_auto_generated !== 0) {
       if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol.toUpperCase().startsWith('XRAY_')) {
         clientUuidOrUser = masterUuid;
         clientPassword = null;
@@ -85,6 +91,10 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
         clientUuidOrUser = masterSshUser;
         clientPassword = masterSshPass;
       }
+    } else {
+      const linkUuid = extractUuidFromV2rayLink(t.v2ray_link);
+      clientUuidOrUser = t.default_user || linkUuid || 'nxt_user';
+      clientPassword = t.default_pass || 'nxt_pass';
     }
 
     db.prepare(`
@@ -242,7 +252,7 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   return cryptoLib.encryptConfig(jsonStr);
 }
 
-function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templateMaxDataGbs = {}) {
+function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templateMaxDataGbs = {}, customUuids = {}) {
   const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(accessCodeId);
   if (!codeRow) return;
 
@@ -270,16 +280,25 @@ function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templ
     if (!t) continue;
 
     const specificDataGb = parseFloat(templateMaxDataGbs[tmplId]) || 0;
+    const explicitUuid = (customUuids[tmplId] && customUuids[tmplId].trim().length > 0) ? customUuids[tmplId].trim() : null;
 
     if (currentMap.has(tmplId)) {
-      db.prepare('UPDATE code_credentials SET template_max_data_gb = ? WHERE access_code_id = ? AND config_template_id = ?')
-        .run(specificDataGb, accessCodeId, tmplId);
+      if (explicitUuid) {
+        db.prepare('UPDATE code_credentials SET client_uuid_or_user = ?, template_max_data_gb = ? WHERE access_code_id = ? AND config_template_id = ?')
+          .run(explicitUuid, specificDataGb, accessCodeId, tmplId);
+      } else {
+        db.prepare('UPDATE code_credentials SET template_max_data_gb = ? WHERE access_code_id = ? AND config_template_id = ?')
+          .run(specificDataGb, accessCodeId, tmplId);
+      }
     } else {
       let clientUuidOrUser = t.default_user || 'nxt_user';
       let clientPassword = t.default_pass || 'nxt_pass';
       const clientEmailTag = `code_${codeRow.code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
 
-      if (t.is_auto_generated !== 0 || t.is_base_config === 0) {
+      if (explicitUuid) {
+        clientUuidOrUser = explicitUuid;
+        clientPassword = null;
+      } else if (t.is_auto_generated !== 0) {
         if (t.protocol === 'vless' || t.protocol === 'vmess' || t.protocol === 'trojan' || t.protocol.toUpperCase().startsWith('XRAY_')) {
           clientUuidOrUser = masterUuid;
           clientPassword = null;
@@ -287,6 +306,10 @@ function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templ
           clientUuidOrUser = masterSshUser;
           clientPassword = masterSshPass;
         }
+      } else {
+        const linkUuid = extractUuidFromV2rayLink(t.v2ray_link);
+        clientUuidOrUser = t.default_user || linkUuid || 'nxt_user';
+        clientPassword = t.default_pass || 'nxt_pass';
       }
 
       db.prepare(`
