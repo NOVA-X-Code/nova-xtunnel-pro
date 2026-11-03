@@ -155,6 +155,16 @@ router.get('/access-codes', (req, res) => {
   }
 
   const accessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
+
+  // Attach credentials so edit modal & info modal can display server details & per-server data
+  accessCodes.forEach(ac => {
+    ac.credentials = db.prepare(`
+      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
+      FROM code_credentials cc
+      JOIN config_templates ct ON cc.config_template_id = ct.id
+      WHERE cc.access_code_id = ?
+    `).all(ac.id);
+  });
   const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 AND is_admin_only = 0').all();
 
   res.render('reseller/access_codes', {
@@ -265,6 +275,25 @@ router.post('/access-codes/:id/edit', (req, res) => {
 
     audit.log('reseller', req.session.username, 'edit_access_code', `Code Premium modifié : ${codeRow.code}`, reseller.id);
     res.redirect('/reseller/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour.`));
+  } catch (e) {
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes/:id/reset-data', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    const codeId = req.params.id;
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ? AND reseller_id = ?').get(codeId, reseller.id);
+    if (!codeRow) {
+      return res.redirect('/reseller/access-codes?error=' + encodeURIComponent('Code d\'accès non trouvé.'));
+    }
+    db.prepare('UPDATE access_codes SET consumed_data_gb = 0 WHERE id = ?').run(codeId);
+    db.prepare('UPDATE code_credentials SET template_consumed_data_gb = 0 WHERE access_code_id = ?').run(codeId);
+    audit.log('reseller', req.session.username, 'reset_code_data', `Data consommée réinitialisée pour le code ${codeRow.code}`, reseller.id);
+    res.redirect('/reseller/access-codes?success=' + encodeURIComponent(`Data consommée réinitialisée à 0 Go pour le code ${codeRow.code}.`));
   } catch (e) {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }

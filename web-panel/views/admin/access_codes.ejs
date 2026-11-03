@@ -451,8 +451,12 @@
                   <td style="padding:16px 10px;">
                     <span class="badge badge-<%= c.status === 'active' ? 'success' : 'danger' %>"><%= c.status %></span>
                   </td>
-                  <td style="padding:16px 10px; text-align:right;">
-                    <button class="btn-ghost small" style="color:#38BDF8; margin-right:6px;" onclick='openEditCodeModal(<%- JSON.stringify(c) %>)'>✏️ Éditer</button>
+                  <td style="padding:16px 10px; text-align:right; white-space:nowrap;">
+                    <button class="btn-ghost small" style="color:#A855F7; margin-right:4px;" title="Détails & Consommation par Serveur" onclick='openInfoCodeModal(<%- JSON.stringify(c) %>)'>ℹ️ Info</button>
+                    <form method="POST" action="/admin/access-codes/<%= c.id %>/reset-data" style="display:inline;" onsubmit="return confirm('Réinitialiser la data consommée de ce code (<%= c.code %>) à 0 Go ?');">
+                      <button class="btn-ghost small" style="color:#F59E0B; margin-right:4px;" title="Réinitialiser la Data">🔄 Reset</button>
+                    </form>
+                    <button class="btn-ghost small" style="color:#38BDF8; margin-right:4px;" onclick='openEditCodeModal(<%- JSON.stringify(c) %>)'>✏️ Éditer</button>
                     <form method="POST" action="/admin/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code d\'accès ?');">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
@@ -987,6 +991,11 @@
             <input type="checkbox" name="is_customizable" id="editIsCustomizable" value="1" />
             <span>✏️ Champs Personnalisables dans l'App (`isCustomizable: true`) — Permet à l'utilisateur dans l'App de modifier/saisir ses propres Payload, SNI, Proxy ou Clés DNS</span>
           </label>
+
+          <label style="display:flex; align-items:center; gap:10px; font-size:13px; cursor:pointer; margin-bottom:10px;">
+            <input type="checkbox" name="is_quota_counted" id="editIsQuotaCounted" value="1" />
+            <span>📊 Décompter du Quota de Data du Client (Décocher pour offrir du trafic gratuit illimité sur ce serveur)</span>
+          </label>
         </div>
 
         <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
@@ -1135,6 +1144,52 @@
     </div>
   </div>
 
+  <!-- MODAL 3.6: INFOS ET CONSOMMATION DU CODE PREMIUM -->
+  <div id="modalInfoCode" class="modal-overlay">
+    <div class="modal-card" style="max-width:650px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="margin:0; font-size:20px; font-weight:900; display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#A855F7; color:#FFF; font-size:15px; font-weight:bold;">i</span>
+          Détails & Consommation du Code
+        </h3>
+        <button onclick="closeModal('modalInfoCode')" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:22px;">✕</button>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+          <div><span style="color:#94A3B8;">Code Premium :</span> <strong id="infoCodeStr" style="color:#38BDF8; font-family:monospace;"></strong></div>
+          <div><span style="color:#94A3B8;">Référence Client :</span> <strong id="infoClientRef" style="color:#F8FAFC;"></strong></div>
+          <div><span style="color:#94A3B8;">Statut :</span> <span id="infoStatus" class="badge"></span></div>
+          <div><span style="color:#94A3B8;">Date Expiration :</span> <strong id="infoExpiry" style="color:#F8FAFC;"></strong></div>
+          <div><span style="color:#94A3B8;">HWID Appareil :</span> <strong id="infoHwid" style="color:#F8FAFC; font-family:monospace;"></strong></div>
+          <div><span style="color:#94A3B8;">Créateur :</span> <strong id="infoReseller" style="color:#F8FAFC;"></strong></div>
+        </div>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px dashed var(--border);">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px;">
+            <span style="color:#94A3B8; font-weight:600;">Consommation Globale Cumulée :</span>
+            <strong id="infoTotalUsage" style="color:#F8FAFC;"></strong>
+          </div>
+          <div style="width:100%; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden;">
+            <div id="infoTotalProgressBar" style="width:0%; background:linear-gradient(90deg, #38BDF8, #A855F7); height:100%; transition:width 0.3s;"></div>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin:0 0 12px 0; font-size:15px; font-weight:800; color:#F8FAFC;">📡 Consommation et Limites par Serveur Associé</h4>
+      <div id="infoServersList" style="max-height:240px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:rgba(0,0,0,0.2);">
+        <!-- Populated via JS -->
+      </div>
+
+      <div style="display:flex; gap:12px; justify-content:space-between; align-items:center; margin-top:24px;">
+        <form method="POST" id="formResetDataModal" action="" onsubmit="return confirm('Réinitialiser la data consommée de ce code à 0 Go ?');">
+          <button type="submit" class="btn-ghost" style="color:#F59E0B; border:1px solid #F59E0B;">🔄 Réinitialiser la Data à 0 Go</button>
+        </form>
+        <button type="button" class="btn-ghost" onclick="closeModal('modalInfoCode')">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     function openModal(id) {
       document.getElementById(id).style.display = 'flex';
@@ -1279,6 +1334,7 @@
       document.getElementById('editIsCustomizable').checked = (t.is_customizable === 1);
       document.getElementById('editIsAutoGenerated').checked = (t.is_auto_generated !== 0);
       document.getElementById('editIsAdminOnly').checked = (t.is_admin_only === 1);
+      document.getElementById('editIsQuotaCounted').checked = (t.is_quota_counted !== 0);
 
       if (t.is_base_config === 1) {
         document.getElementById('editAccessTypeBase').checked = true;
@@ -1325,6 +1381,65 @@
       <% } %>
 
       openModal('modalEditCode');
+    }
+
+    function openInfoCodeModal(c) {
+      document.getElementById('infoCodeStr').innerText = c.code || '';
+      document.getElementById('infoClientRef').innerText = c.client_reference || 'Aucune';
+      document.getElementById('infoExpiry').innerText = c.expiry_date || 'Jamais';
+      document.getElementById('infoHwid').innerText = c.allowed_hwids || '🟢 Non verrouillé (1er clic)';
+      document.getElementById('infoReseller').innerText = c.reseller_username || 'Administrateur';
+
+      var statusElem = document.getElementById('infoStatus');
+      statusElem.innerText = c.status || 'active';
+      statusElem.className = 'badge badge-' + (c.status === 'active' ? 'success' : 'danger');
+
+      var consumed = parseFloat(c.consumed_data_gb) || 0;
+      var maxData = parseFloat(c.max_data_gb) || 0;
+      var totalUsageStr = consumed.toFixed(2) + ' Go / ' + (maxData > 0 ? maxData + ' Go' : 'Illimité');
+      document.getElementById('infoTotalUsage').innerText = totalUsageStr;
+
+      var pct = maxData > 0 ? Math.min(100, Math.round((consumed / maxData) * 100)) : (consumed > 0 ? 100 : 0);
+      document.getElementById('infoTotalProgressBar').style.width = pct + '%';
+
+      var formReset = document.getElementById('formResetDataModal');
+      if (formReset) {
+        formReset.action = '/admin/access-codes/' + c.id + '/reset-data';
+      }
+
+      var listContainer = document.getElementById('infoServersList');
+      listContainer.innerHTML = '';
+
+      if (c.credentials && Array.isArray(c.credentials) && c.credentials.length > 0) {
+        c.credentials.forEach(function(cr) {
+          var sConsumed = parseFloat(cr.template_consumed_data_gb) || 0;
+          var sMax = parseFloat(cr.template_max_data_gb) || 0;
+          var sPct = sMax > 0 ? Math.min(100, Math.round((sConsumed / sMax) * 100)) : (maxData > 0 ? Math.min(100, Math.round((consumed / maxData) * 100)) : 0);
+
+          var itemDiv = document.createElement('div');
+          itemDiv.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px;';
+          itemDiv.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <div>
+                <strong style="color:#F8FAFC; font-size:13px;">${cr.name || 'Serveur'}</strong>
+                <span class="badge badge-purple" style="font-size:10px; padding:2px 6px; margin-left:6px;">${(cr.protocol || 'SSH').toUpperCase()}</span>
+              </div>
+              <div style="font-size:12px; font-weight:700; color:#38BDF8;">
+                ${sConsumed.toFixed(2)} Go / ${sMax > 0 ? sMax + ' Go (Spécifique)' : (maxData > 0 ? maxData + ' Go (Plafond Global)' : 'Illimité')}
+              </div>
+            </div>
+            ${cr.client_uuid_or_user ? `<div style="font-size:11px; color:#94A3B8; font-family:monospace; margin-bottom:6px;">UUID/User: ${cr.client_uuid_or_user}</div>` : ''}
+            <div style="width:100%; background:rgba(255,255,255,0.08); height:6px; border-radius:3px; overflow:hidden;">
+              <div style="width:${sPct}%; background:${sPct >= 90 ? '#EF4444' : '#38BDF8'}; height:100%;"></div>
+            </div>
+          `;
+          listContainer.appendChild(itemDiv);
+        });
+      } else {
+        listContainer.innerHTML = '<div style="color:#94A3B8; font-size:13px; text-align:center; padding:12px;">Aucun serveur optionnel spécifique configuré pour ce code.</div>';
+      }
+
+      openModal('modalInfoCode');
     }
 
     document.addEventListener('DOMContentLoaded', function() {

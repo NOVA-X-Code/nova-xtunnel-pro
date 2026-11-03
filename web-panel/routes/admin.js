@@ -157,6 +157,16 @@ router.get('/access-codes', (req, res) => {
     LEFT JOIN resellers r ON ac.reseller_id = r.id
     ORDER BY ac.id DESC
   `).all();
+
+  // Attach credentials to each access code so edit modal & info modal can display server details & per-server data
+  accessCodes.forEach(ac => {
+    ac.credentials = db.prepare(`
+      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
+      FROM code_credentials cc
+      JOIN config_templates ct ON cc.config_template_id = ct.id
+      WHERE cc.access_code_id = ?
+    `).all(ac.id);
+  });
   const notifications = db.prepare('SELECT * FROM broadcast_notifications ORDER BY id DESC').all();
 
   const appSettingsRows = db.prepare('SELECT * FROM app_settings').all();
@@ -288,8 +298,9 @@ router.post('/config-templates/:id/edit', (req, res) => {
     }
 
     const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
-    const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
+    const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on') ? 1 : 0;
     const isAdminOnlyVal = (req.body.is_admin_only === '1' || req.body.is_admin_only === 'on') ? 1 : 0;
+    const isQuotaCountedVal = (req.body.is_quota_counted === '1' || req.body.is_quota_counted === 'on') ? 1 : 0;
 
     db.prepare(`
       UPDATE config_templates SET
@@ -317,7 +328,7 @@ router.post('/config-templates/:id/edit', (req, res) => {
       default_pass || null,
       is_base_config,
       isCustomizableVal,
-      is_quota_counted === '1' ? 1 : 0,
+      isQuotaCountedVal,
       is_global_premium,
       parseFloat(max_data_gb) || 0,
       isAutoGenVal,
@@ -540,6 +551,23 @@ router.post('/access-codes/:id/edit', (req, res) => {
     res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour avec succès.`));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes/:id/reset-data', (req, res) => {
+  try {
+    const codeId = req.params.id;
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeId);
+    if (!codeRow) {
+      return res.redirect('/admin/access-codes?error=' + encodeURIComponent('Code d\'accès non trouvé.'));
+    }
+    db.prepare('UPDATE access_codes SET consumed_data_gb = 0 WHERE id = ?').run(codeId);
+    db.prepare('UPDATE code_credentials SET template_consumed_data_gb = 0 WHERE access_code_id = ?').run(codeId);
+    audit.log('admin', req.session.username, 'reset_code_data', `Data consommée réinitialisée pour le code ${codeRow.code}`);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Data consommée réinitialisée à 0 Go pour le code ${codeRow.code}.`));
+  } catch (err) {
+    console.error('Reset Access Code Data error:', err);
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent('Erreur lors de la réinitialisation de la data.'));
   }
 });
 
