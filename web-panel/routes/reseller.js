@@ -297,26 +297,6 @@ router.post('/access-codes/:id/reset-usage', (req, res) => {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
-});
-
-router.post('/access-codes/:id/reset-data', (req, res) => {
-  const reseller = loadSelf(req);
-  if (!reseller) return res.redirect('/login');
-
-  try {
-    const codeId = req.params.id;
-    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ? AND reseller_id = ?').get(codeId, reseller.id);
-    if (!codeRow) {
-      return res.redirect('/reseller/access-codes?error=' + encodeURIComponent('Code d\'accès non trouvé.'));
-    }
-    db.prepare('UPDATE access_codes SET consumed_data_gb = 0 WHERE id = ?').run(codeId);
-    db.prepare('UPDATE code_credentials SET template_consumed_data_gb = 0 WHERE access_code_id = ?').run(codeId);
-    audit.log('reseller', req.session.username, 'reset_code_data', `Data consommée réinitialisée pour le code ${codeRow.code}`, reseller.id);
-    res.redirect('/reseller/access-codes?success=' + encodeURIComponent(`Data consommée réinitialisée à 0 Go pour le code ${codeRow.code}.`));
-  } catch (e) {
-    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
-  }
-});
 
 router.post('/access-codes/:id/delete', (req, res) => {
   const reseller = loadSelf(req);
