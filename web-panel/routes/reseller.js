@@ -280,6 +280,25 @@ router.post('/access-codes/:id/edit', (req, res) => {
   }
 });
 
+router.post('/access-codes/:id/reset-usage', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.redirect('/login');
+
+  try {
+    const codeId = req.params.id;
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ? AND reseller_id = ?').get(codeId, reseller.id);
+    if (!codeRow) throw new Error("Code d'accès introuvable.");
+
+    db.prepare("UPDATE access_codes SET consumed_data_gb = 0, status = 'active' WHERE id = ?").run(codeId);
+    db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ?").run(codeId);
+    audit.log('reseller', req.session.username, 'reset_code_usage', `Consommation globale remise à 0 Go pour la clé #${codeId}`, reseller.id);
+    res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Consommation de la clé d\'accès réinitialisée à 0 Go (Statut Réactivé).'));
+  } catch (e) {
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+});
+
 router.post('/access-codes/:id/reset-data', (req, res) => {
   const reseller = loadSelf(req);
   if (!reseller) return res.redirect('/login');

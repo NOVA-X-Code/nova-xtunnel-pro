@@ -249,11 +249,15 @@
           </div>
         <% } %>
 
-        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
-          <button type="button" class="btn-ghost" onclick="closeModal('modalEditCode')">Annuler</button>
-          <button type="submit" class="btn-primary" style="background:#22C55E; border:none;">Enregistrer les Modifications</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px;">
+          <button type="button" class="btn-ghost small" style="color:#F59E0B;" onclick="if(confirm('Remettre la consommation de ce code à 0 Go et le réactiver ?')) document.getElementById('resellerFormResetCodeUsage').submit();">🔄 Remettre Conso à 0 Go</button>
+          <div style="display:flex; gap:12px;">
+            <button type="button" class="btn-ghost" onclick="closeModal('modalEditCode')">Annuler</button>
+            <button type="submit" class="btn-primary" style="background:#22C55E; border:none;">Enregistrer les Modifications</button>
+          </div>
         </div>
       </form>
+      <form method="POST" id="resellerFormResetCodeUsage" action="" style="display:none;"></form>
     </div>
   </div>
 
@@ -323,6 +327,9 @@
 
     function openEditCodeModal(c) {
       document.getElementById('formEditCode').action = '/reseller/access-codes/' + c.id + '/edit';
+      if (document.getElementById('resellerFormResetCodeUsage')) {
+        document.getElementById('resellerFormResetCodeUsage').action = '/reseller/access-codes/' + c.id + '/reset-usage';
+      }
       document.getElementById('editCodeClientRef').value = c.client_reference || '';
       document.getElementById('editCodeMaxDataGb').value = c.max_data_gb || 0;
       document.getElementById('resellerEditCodeExpiryDate').value = c.expiry_date || '';

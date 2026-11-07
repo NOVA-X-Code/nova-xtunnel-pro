@@ -554,6 +554,31 @@ router.post('/access-codes/:id/edit', (req, res) => {
   }
 });
 
+router.post('/access-codes/:id/reset-usage', (req, res) => {
+  try {
+    const codeId = req.params.id;
+    db.prepare("UPDATE access_codes SET consumed_data_gb = 0, status = 'active' WHERE id = ?").run(codeId);
+    db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ?").run(codeId);
+    audit.log('admin', req.session.username, 'reset_code_usage', `Consommation globale remise à 0 Go pour la clé #${codeId}`, null);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation de la clé d\'accès réinitialisée à 0 Go (Statut Réactivé).'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/access-codes/:id/reset-server-usage', (req, res) => {
+  try {
+    const codeId = req.params.id;
+    const { template_id } = req.body;
+    if (template_id) {
+      db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ? AND config_template_id = ?").run(codeId, template_id);
+    }
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation du serveur réinitialisée à 0 Go pour cette clé.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
 router.post('/access-codes/:id/reset-data', (req, res) => {
   try {
     const codeId = req.params.id;

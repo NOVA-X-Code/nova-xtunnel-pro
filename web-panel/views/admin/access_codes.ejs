@@ -1136,11 +1136,15 @@
           </div>
         <% } %>
 
-        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:28px;">
-          <button type="button" class="btn-ghost" onclick="closeModal('modalEditCode')">Annuler</button>
-          <button type="submit" class="btn-glow btn-glow-success">Enregistrer les Modifications</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:28px;">
+          <button type="button" class="btn-ghost small" style="color:#F59E0B;" onclick="if(confirm('Remettre la consommation globale de cette clé à 0 Go et la réactiver ?')) document.getElementById('formResetCodeUsage').submit();">🔄 Remettre Conso à 0 Go</button>
+          <div style="display:flex; gap:12px;">
+            <button type="button" class="btn-ghost" onclick="closeModal('modalEditCode')">Annuler</button>
+            <button type="submit" class="btn-glow btn-glow-success">Enregistrer les Modifications</button>
+          </div>
         </div>
       </form>
+      <form method="POST" id="formResetCodeUsage" action="" style="display:none;"></form>
     </div>
   </div>
 
@@ -1353,6 +1357,7 @@
 
     function openEditCodeModal(c) {
       document.getElementById('formEditCode').action = '/admin/access-codes/' + c.id + '/edit';
+      document.getElementById('formResetCodeUsage').action = '/admin/access-codes/' + c.id + '/reset-usage';
       document.getElementById('editCodeClientRef').value = c.client_reference || '';
       document.getElementById('editCodeMaxDataGb').value = c.max_data_gb || 0;
       document.getElementById('editCodeExpiryDate').value = c.expiry_date || '';

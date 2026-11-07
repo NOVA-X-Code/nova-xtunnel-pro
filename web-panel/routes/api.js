@@ -177,8 +177,14 @@ router.post('/report-usage', verifyAppSignature, (req, res) => {
       // Update consumed_data_gb for the access code
       db.prepare('UPDATE access_codes SET consumed_data_gb = consumed_data_gb + ? WHERE id = ?').run(usageGb, codeRow.id);
 
-      // Also update cumulative consumed_data_gb on the server template
+      // Update consumed_data_gb for this specific credential/server on this code
       if (template_id) {
+        try {
+          db.prepare('UPDATE code_credentials SET consumed_data_gb = consumed_data_gb + ? WHERE access_code_id = ? AND config_template_id = ?')
+            .run(usageGb, codeRow.id, template_id);
+        } catch (e) {}
+
+        // Also update cumulative consumed_data_gb on the server template
         try {
           db.prepare('UPDATE config_templates SET consumed_data_gb = consumed_data_gb + ? WHERE id = ?').run(usageGb, template_id);
         } catch (e) {}
@@ -195,6 +201,8 @@ router.post('/report-usage', verifyAppSignature, (req, res) => {
 
     // Determine effective max data limit (Template specific VS Global code limit)
     let effectiveMaxGb = updatedCode.max_data_gb;
+    let templateConsumedGb = 0;
+
     if (template_id) {
       const tmplRow = db.prepare('SELECT max_data_gb, consumed_data_gb, is_quota_counted FROM config_templates WHERE id = ?').get(template_id);
       if (tmplRow) {
@@ -208,13 +216,26 @@ router.post('/report-usage', verifyAppSignature, (req, res) => {
             max_gb: tmplRow.max_data_gb
           });
         }
+
         if (tmplRow.is_quota_counted === 0) {
           effectiveMaxGb = 0;
         } else {
-          const credRow = db.prepare('SELECT template_max_data_gb FROM code_credentials WHERE access_code_id = ? AND config_template_id = ?')
+          const credRow = db.prepare('SELECT template_max_data_gb, consumed_data_gb FROM code_credentials WHERE access_code_id = ? AND config_template_id = ?')
             .get(updatedCode.id, template_id);
-          if (credRow && credRow.template_max_data_gb > 0) {
-            effectiveMaxGb = credRow.template_max_data_gb;
+          if (credRow) {
+            templateConsumedGb = credRow.consumed_data_gb || 0;
+            if (credRow.template_max_data_gb > 0) {
+              effectiveMaxGb = credRow.template_max_data_gb;
+              if (templateConsumedGb >= effectiveMaxGb) {
+                return res.json({
+                  status: 'depleted',
+                  is_active: false,
+                  message: 'Quota Data de ce serveur spécifique épuisé !',
+                  consumed_gb: templateConsumedGb,
+                  max_gb: effectiveMaxGb
+                });
+              }
+            }
           }
         }
       }
