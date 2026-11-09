@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Powered%20by-NOSTRA-ff69b4.svg" alt="Powered by NOSTRA">
 </p>
 
-<h1 align="center">🚀 NOVA XTUNNEL</h1>
+<h1 align="center">🚀 NOVA XTUNNEL PRO</h1>
 
 <p align="center">
   <strong>Enterprise-grade VPN tunnel management suite with dual-panel architecture</strong>
@@ -35,9 +35,8 @@ Supported Protocols
 nova-x-tunnel/
 ├── terminal-panel/                 # Bash interactive SSH menu
 │   ├── install.sh                  # Complete VPS installation
-│   ├── menu.sh                     # Main panel interface (`menu` command)
-│   ├── sshd                    # SSH daemon configuration
-│   └── falconproxy/            # falcon proxy            
+│   ├── menu.sh                     # Main panel interface (`menu` command)                
+│   └──  sshd          # SSH daemon configuration
 │
 └── web-panel/                      # Node.js Admin/Reseller interface
     ├── deploy/

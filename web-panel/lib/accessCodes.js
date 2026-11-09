@@ -77,7 +77,7 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
     let clientPassword = t.default_pass || 'nxt_pass';
     const clientEmailTag = `code_${code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
 
-    const specificDataGb = parseFloat(templateMaxDataGbs[t.id]) || 0;
+    const specificDataGb = parseFloat(templateMaxDataGbs[t.id]) || t.max_data_gb || 0;
     const explicitUuid = (customUuids[t.id] && customUuids[t.id].trim().length > 0) ? customUuids[t.id].trim() : null;
 
     if (explicitUuid) {
@@ -279,7 +279,7 @@ function updateAccessCodeTemplates(accessCodeId, selectedTemplateIds = [], templ
     const t = db.prepare('SELECT * FROM config_templates WHERE id = ?').get(tmplId);
     if (!t) continue;
 
-    const specificDataGb = parseFloat(templateMaxDataGbs[tmplId]) || 0;
+    const specificDataGb = parseFloat(templateMaxDataGbs[tmplId]) || t.max_data_gb || 0;
     const explicitUuid = (customUuids[tmplId] && customUuids[tmplId].trim().length > 0) ? customUuids[tmplId].trim() : null;
 
     if (currentMap.has(tmplId)) {
