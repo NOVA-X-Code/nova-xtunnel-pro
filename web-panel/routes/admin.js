@@ -338,6 +338,13 @@ router.post('/config-templates/:id/edit', (req, res) => {
 
     audit.log('admin', req.session.username, 'edit_template', `Template mis à jour : ${name}`, req.params.id);
 
+    if (isAutoGenVal === 0) {
+      try {
+        db.prepare('UPDATE code_credentials SET client_uuid_or_user = ?, client_password = ? WHERE config_template_id = ?')
+          .run(default_user || 'NOSTRA', default_pass || '@LaBoKingFreeSurf', req.params.id);
+      } catch (e) {}
+    }
+
     if (is_base_config === 1 || is_global_premium === 1) {
       propagateTemplateToExistingCodes(req.params.id, xray_inbound_id);
     }

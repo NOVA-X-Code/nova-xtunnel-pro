@@ -113,7 +113,7 @@ function getAccessCodeDetails(codeStr) {
   if (!codeRow) return null;
 
   const creds = db.prepare(`
-    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.is_customizable, ct.is_quota_counted, ct.max_data_gb AS template_max_data_gb
+    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.default_user, ct.default_pass, ct.is_auto_generated, ct.is_customizable, ct.is_quota_counted, ct.max_data_gb AS template_max_data_gb
     FROM code_credentials cc
     JOIN config_templates ct ON cc.config_template_id = ct.id
     WHERE cc.access_code_id = ?
@@ -176,6 +176,20 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
 
   for (const c of accessCode.credentials) {
     const isZiVpnUdp = c.protocol.toUpperCase() === 'UDP';
+
+    // If auto_generate = 0, always use the template's current default_user / default_pass!
+    let effectiveUser = c.client_uuid_or_user;
+    let effectivePass = c.client_password;
+
+    if (c.is_auto_generated === 0) {
+      if (c.default_user && c.default_user.trim().length > 0) {
+        effectiveUser = c.default_user.trim();
+      }
+      if (c.default_pass && c.default_pass.trim().length > 0) {
+        effectivePass = c.default_pass.trim();
+      }
+    }
+
     const serverObj = {
       Name: c.name,
       Info: c.info || '',
@@ -183,8 +197,8 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
       TYPE: c.protocol.toUpperCase(),
       ServerIP: c.server_ip,
       ServerPort: c.server_port,
-      USER: isZiVpnUdp ? (c.client_password || '@LaBoKingFreeSurf') : c.client_uuid_or_user,
-      PASS: isZiVpnUdp ? '' : (c.client_password || ''),
+      USER: isZiVpnUdp ? (effectivePass || '@LaBoKingFreeSurf') : effectiveUser,
+      PASS: isZiVpnUdp ? '' : (effectivePass || ''),
       isCustomizable: c.is_customizable === 1
     };
 
