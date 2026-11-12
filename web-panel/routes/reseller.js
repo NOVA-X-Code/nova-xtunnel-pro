@@ -184,6 +184,10 @@ router.post('/access-codes', (req, res) => {
     return res.redirect('/reseller?error=' + encodeURIComponent('Accès refusé : La génération de codes Premium n\'est pas autorisée pour votre compte.'));
   }
 
+  if (reseller.data_quota_gb !== null && reseller.data_quota_gb <= 0) {
+    return res.redirect('/reseller/access-codes?error=' + encodeURIComponent('Accès refusé : Votre solde de Data Revendeur alloué par l\'administrateur est épuisé (0 Go restant). Contactez l\'administrateur pour recharger votre quota.'));
+  }
+
   try {
     const accessCodesLib = require('../lib/accessCodes');
     const { clientReference, maxDataGb, expiryDays, hwid, selectedTemplateIds } = req.body;
@@ -303,8 +307,13 @@ router.post('/access-codes/:id/delete', (req, res) => {
   if (!reseller) return res.redirect('/login');
 
   try {
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ? AND reseller_id = ?').get(req.params.id, reseller.id);
+    if (codeRow && codeRow.consumed_data_gb > 0) {
+      db.prepare('UPDATE resellers SET consumed_quota_gb = COALESCE(consumed_quota_gb, 0) + ? WHERE id = ?')
+        .run(codeRow.consumed_data_gb, reseller.id);
+    }
     db.prepare('DELETE FROM access_codes WHERE id = ? AND reseller_id = ?').run(req.params.id, reseller.id);
-    audit.log('reseller', req.session.username, 'delete_access_code', `Code Premium supprimé`, reseller.id);
+    audit.log('reseller', req.session.username, 'delete_access_code', `Code Premium ${codeRow ? codeRow.code : req.params.id} supprimé (historique de conso conservé)`, reseller.id);
     res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
   } catch (e) {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));

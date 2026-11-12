@@ -169,6 +169,11 @@ router.post('/report-usage', verifyAppSignature, (req, res) => {
       }
     }
 
+    // Record live last_seen_at timestamp
+    try {
+      db.prepare('UPDATE access_codes SET last_seen_at = ? WHERE id = ?').run(Date.now(), codeRow.id);
+    } catch (e) {}
+
     // Calculate delta usage in GB
     const bytesReported = parseFloat(bytes_used) || 0;
     if (bytesReported > 0) {

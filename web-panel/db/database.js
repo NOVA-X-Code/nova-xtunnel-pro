@@ -142,6 +142,7 @@ try { db.exec('ALTER TABLE config_templates ADD COLUMN dns_server TEXT DEFAULT "
 try { db.exec('ALTER TABLE access_codes ADD COLUMN client_reference TEXT DEFAULT ""'); } catch (e) {}
 try { db.exec('ALTER TABLE access_codes ADD COLUMN expiry_days INTEGER DEFAULT 30'); } catch (e) {}
 try { db.exec('ALTER TABLE access_codes ADD COLUMN activated_at TEXT DEFAULT NULL'); } catch (e) {}
+try { db.exec('ALTER TABLE access_codes ADD COLUMN last_seen_at INTEGER DEFAULT 0'); } catch (e) {}
 
 try {
   db.exec('ALTER TABLE clients ADD COLUMN usage_at_deletion_gb REAL');

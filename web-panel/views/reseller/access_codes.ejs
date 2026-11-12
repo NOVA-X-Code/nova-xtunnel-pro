@@ -55,10 +55,29 @@
       </div>
     <% } %>
 
+    <!-- CARDE SOLDE DATA REVENDEUR -->
+    <div class="stat-card" style="margin-bottom:24px; border-color:rgba(56, 189, 248, 0.3);">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3 style="margin:0; font-size:16px; color:#38BDF8; font-weight:800;">📊 Solde Data Revendeur Alloué par l'Admin</h3>
+          <p style="margin:4px 0 0 0; font-size:12px; color:#94A3B8;">Solde total de données utilisable pour créer des clés Premium clients.</p>
+        </div>
+        <div style="text-align:right;">
+          <span style="font-size:22px; font-weight:900; color:#38BDF8;">
+            <%= reseller.data_quota_gb !== null ? reseller.data_quota_gb.toFixed(2) + ' Go' : 'Illimité' %>
+          </span>
+        </div>
+      </div>
+    </div>
+
     <!-- TABLEAU DES CODES GENERES -->
     <div class="stat-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
-        <h3 style="margin:0; font-size:18px; font-weight:800;">Mes Clés Premium Générées</h3>
+        <% const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length; %>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <h3 style="margin:0; font-size:18px; font-weight:800;">Mes Clés Premium Générées</h3>
+          <span class="badge badge-success" style="font-size:11px; padding:5px 12px; box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);">🟢 <%= onlineCount %> Clients En Ligne</span>
+        </div>
       </div>
 
       <% if (accessCodes.length === 0) { %>
@@ -73,6 +92,7 @@
               <tr style="border-bottom:1px solid var(--border); color:var(--text-muted); text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
                 <th style="padding:12px 10px;">Référence Client</th>
                 <th style="padding:12px 10px;">Clé Premium</th>
+                <th style="padding:12px 10px;">Activité</th>
                 <th style="padding:12px 10px;">Consommation Data</th>
                 <th style="padding:12px 10px;">Empreinte Appareil (HWID)</th>
                 <th style="padding:12px 10px;">Expiration</th>
@@ -88,6 +108,17 @@
                   </td>
                   <td style="padding:14px 10px;">
                     <div style="display:inline-flex; align-items:center; gap:6px;">
+                      <span class="code-box"><%= c.code %></span>
+                      <button class="btn-ghost small" onclick="copyCode('<%= c.code %>')" title="Copier le code">📋 Copier</button>
+                    </div>
+                  </td>
+                  <td style="padding:14px 10px;">
+                    <% if (c.last_seen_at && (Date.now() - c.last_seen_at) < 35000) { %>
+                      <span class="badge badge-success" style="box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);">🟢 En Ligne</span>
+                    <% } else { %>
+                      <span class="badge" style="background:rgba(255,255,255,0.05); color:#94A3B8;">🔴 Hors Ligne</span>
+                    <% } %>
+                  </td>
                       <span class="code-box"><%= c.code %></span>
                       <button class="btn-ghost small" onclick="copyCode('<%= c.code %>')" title="Copier la clé" style="padding:4px 8px; border-radius:6px; cursor:pointer;">📋</button>
                     </div>

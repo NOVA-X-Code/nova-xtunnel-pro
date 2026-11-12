@@ -605,7 +605,13 @@ router.post('/access-codes/:id/reset-data', (req, res) => {
 
 router.post('/access-codes/:id/delete', (req, res) => {
   try {
+    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(req.params.id);
+    if (codeRow && codeRow.reseller_id && codeRow.consumed_data_gb > 0) {
+      db.prepare('UPDATE resellers SET consumed_quota_gb = COALESCE(consumed_quota_gb, 0) + ? WHERE id = ?')
+        .run(codeRow.consumed_data_gb, codeRow.reseller_id);
+    }
     db.prepare('DELETE FROM access_codes WHERE id = ?').run(req.params.id);
+    audit.log('admin', req.session.username, 'delete_access_code', `Code Premium ${codeRow ? codeRow.code : req.params.id} supprimé (historique de conso conservé)`, null);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));

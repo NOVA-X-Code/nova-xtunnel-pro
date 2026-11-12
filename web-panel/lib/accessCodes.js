@@ -175,6 +175,11 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   }
 
   for (const c of accessCode.credentials) {
+    // If client reached individual server data limit, omit this server from the list!
+    if (c.template_max_data_gb > 0 && (c.consumed_data_gb || 0) >= c.template_max_data_gb) {
+      continue;
+    }
+
     const isZiVpnUdp = c.protocol.toUpperCase() === 'UDP';
 
     // If auto_generate = 0, always use the template's current default_user / default_pass!
