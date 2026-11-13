@@ -176,6 +176,33 @@ router.get('/access-codes', (req, res) => {
   });
 });
 
+router.get('/access-codes/data', (req, res) => {
+  const reseller = loadSelf(req);
+  if (!reseller) return res.json({ error: 'unauthorized' });
+
+  const accessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
+
+  let resellerConsumedGb = reseller.consumed_quota_gb || 0;
+  accessCodes.forEach(ac => {
+    resellerConsumedGb += (ac.consumed_data_gb || 0);
+    ac.credentials = db.prepare(`
+      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
+      FROM code_credentials cc
+      JOIN config_templates ct ON cc.config_template_id = ct.id
+      WHERE cc.access_code_id = ?
+    `).all(ac.id);
+  });
+
+  const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
+
+  res.json({
+    accessCodes,
+    onlineCount,
+    resellerConsumedGb,
+    resellerQuotaGb: reseller.data_quota_gb
+  });
+});
+
 router.post('/access-codes', (req, res) => {
   const reseller = loadSelf(req);
   if (!reseller) return res.redirect('/login');

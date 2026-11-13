@@ -46,7 +46,7 @@
     .form-control { width: 100%; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; outline: none; }
 
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); justify-content: center; align-items: center; z-index: 9999; padding: 16px; }
-    .modal-card { background: var(--card-bg, #181825); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+    .modal-card { background: var(--card-bg, #181825); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
 
     .toast-msg { position: fixed; bottom: 24px; right: 24px; background: #22C55E; color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4); display: none; z-index: 10000; }
   </style>
@@ -60,11 +60,17 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px;">
       <div>
         <h1 style="font-size:24px; font-weight:800; margin:0;">Espace Clés Premium Revendeur</h1>
-        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:13px;">Générez et gérez les clés d'accès pour vos clients.</p>
+        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:13px;">Générez et gérez les clés d'accès Premium avec suivi de la consommation en temps réel et rafraîchissement Live.</p>
       </div>
-      <button class="btn-primary" style="background:#22C55E; border:none; padding:10px 18px; font-weight:700;" onclick="openModal('modalCreateCode')">
-        + Générer une Clé Premium
-      </button>
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:12px; color:#4ADE80; font-weight:700; cursor:pointer; background:rgba(34,197,94,0.1); padding:8px 14px; border-radius:10px; border:1px solid rgba(34,197,94,0.3);">
+          <input type="checkbox" id="resellerAutoRefreshToggle" checked style="width:16px; height:16px;" />
+          <span>⚡ Live Refresh (5s)</span>
+        </label>
+        <button class="btn-primary" style="background:#22C55E; border:none; padding:10px 18px; font-weight:700;" onclick="openModal('modalCreateCode')">
+          + Générer une Clé Premium
+        </button>
+      </div>
     </div>
 
     <% if (typeof error !== 'undefined' && error) { %>
@@ -79,17 +85,27 @@
       </div>
     <% } %>
 
-    <!-- CARDE SOLDE DATA REVENDEUR -->
-    <div class="stat-card" style="margin-bottom:24px; border-color:rgba(56, 189, 248, 0.3);">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <h3 style="margin:0; font-size:16px; color:#38BDF8; font-weight:800;">📊 Solde Data Revendeur Alloué par l'Admin</h3>
-          <p style="margin:4px 0 0 0; font-size:12px; color:#94A3B8;">Solde total de données utilisable pour créer des clés Premium clients.</p>
+    <%
+      let totalConsumedGb = 0;
+      accessCodes.forEach(c => { totalConsumedGb += (c.consumed_data_gb || 0); });
+      const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
+    %>
+
+    <!-- SUMMARY METRICS CARDS REVENDEUR -->
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:24px;">
+      <!-- CARD 1: Online / Total -->
+      <div class="stat-card" style="margin-bottom:0; border-color:rgba(34, 197, 94, 0.4);">
+        <div style="font-size:11px; font-weight:700; color:#4ADE80; text-transform:uppercase; margin-bottom:6px;">🟢 Clients En Ligne</div>
+        <div style="font-size:24px; font-weight:900; color:#F8FAFC;" id="resellerOnlineBadge">
+          <%= onlineCount %> <span style="font-size:14px; color:#94A3B8; font-weight:500;">/ <%= accessCodes.length %></span>
         </div>
-        <div style="text-align:right;">
-          <span style="font-size:22px; font-weight:900; color:#38BDF8;" id="resellerQuotaText">
-            <%= reseller.data_quota_gb !== null ? reseller.data_quota_gb.toFixed(2) + ' Go' : 'Illimité' %>
-          </span>
+      </div>
+
+      <!-- CARD 2: Total Consumed vs Allocated Quota -->
+      <div class="stat-card" style="margin-bottom:0; border-color:rgba(56, 189, 248, 0.4);">
+        <div style="font-size:11px; font-weight:700; color:#38BDF8; text-transform:uppercase; margin-bottom:6px;">📊 Consommation Totale des Clients</div>
+        <div style="font-size:24px; font-weight:900; color:#38BDF8;" id="resellerConsumedText">
+          <%= totalConsumedGb.toFixed(2) %> Go <span style="font-size:13px; color:#94A3B8; font-weight:500;">/ <%= reseller.data_quota_gb !== null ? reseller.data_quota_gb.toFixed(2) + ' Go Alloués' : 'Illimité' %></span>
         </div>
       </div>
     </div>
@@ -97,11 +113,7 @@
     <!-- TABLEAU DES CODES GENERES -->
     <div class="stat-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
-        <% const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length; %>
-        <div style="display:flex; align-items:center; gap:12px;">
-          <h3 style="margin:0; font-size:18px; font-weight:800;">Mes Clés Premium Générées</h3>
-          <span class="badge badge-success" id="resellerOnlineBadge" style="font-size:11px; padding:5px 12px; box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);">🟢 <%= onlineCount %> Clients En Ligne</span>
-        </div>
+        <h3 style="margin:0; font-size:18px; font-weight:800;">Mes Clés Premium Générées</h3>
       </div>
 
       <% if (accessCodes.length === 0) { %>
@@ -209,16 +221,21 @@
 
         <% if (extraTemplates && extraTemplates.length > 0) { %>
           <div class="form-group" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
-            <label>Serveurs Premium Optionnels à Inclure & Limites Data Spécifiques</label>
-            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg);">
+            <label>Serveurs Premium Optionnels à Inclure (UUID Custom & Limite Data)</label>
+            <div style="max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg);">
               <% extraTemplates.forEach(t => { %>
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; flex-wrap:wrap;">
                   <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
                     <input type="checkbox" name="selectedTemplateIds" value="<%= t.id %>" checked />
                     <span style="font-weight:600; color:#F8FAFC;"><%= t.name %></span>
                     <span class="badge badge-purple" style="font-size:10px; padding:2px 6px;"><%= t.protocol.toUpperCase() %></span>
                   </label>
-                  <input type="number" step="0.5" name="template_max_gb_<%= t.id %>" placeholder="Go (0=global)" class="form-control" style="width:110px; padding:4px 8px; font-size:11px;" />
+                  <div style="display:flex; gap:6px; align-items:center;">
+                    <% if (t.protocol.toLowerCase().includes('vless') || t.protocol.toLowerCase().includes('vmess') || t.protocol.toLowerCase().includes('trojan') || t.protocol.toUpperCase().startsWith('XRAY_')) { %>
+                      <input type="text" name="custom_uuid_<%= t.id %>" placeholder="UUID Custom" class="form-control" style="width:160px; padding:4px 8px; font-size:11px;" />
+                    <% } %>
+                    <input type="number" step="0.5" name="template_max_gb_<%= t.id %>" placeholder="Go (0=global)" class="form-control" style="width:100px; padding:4px 8px; font-size:11px;" />
+                  </div>
                 </div>
               <% }); %>
             </div>
@@ -279,15 +296,20 @@
         <% if (extraTemplates && extraTemplates.length > 0) { %>
           <div class="form-group" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
             <label>Gérer les Serveurs Premium Optionnels Associés à ce Code</label>
-            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg);">
+            <div style="max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg);">
               <% extraTemplates.forEach(t => { %>
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; flex-wrap:wrap;">
                   <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
                     <input type="checkbox" name="selectedTemplateIds" id="reseller_edit_code_tmpl_<%= t.id %>" value="<%= t.id %>" />
                     <span style="font-weight:600; color:#F8FAFC;"><%= t.name %></span>
                     <span class="badge badge-purple" style="font-size:10px; padding:2px 6px;"><%= t.protocol.toUpperCase() %></span>
                   </label>
-                  <input type="number" step="0.5" name="template_max_gb_<%= t.id %>" id="reseller_edit_code_max_gb_<%= t.id %>" placeholder="Go (0=global)" class="form-control" style="width:110px; padding:4px 8px; font-size:11px;" />
+                  <div style="display:flex; gap:6px; align-items:center;">
+                    <% if (t.protocol.toLowerCase().includes('vless') || t.protocol.toLowerCase().includes('vmess') || t.protocol.toLowerCase().includes('trojan') || t.protocol.toUpperCase().startsWith('XRAY_')) { %>
+                      <input type="text" name="custom_uuid_<%= t.id %>" id="reseller_edit_code_uuid_<%= t.id %>" placeholder="UUID Custom" class="form-control" style="width:160px; padding:4px 8px; font-size:11px;" />
+                    <% } %>
+                    <input type="number" step="0.5" name="template_max_gb_<%= t.id %>" id="reseller_edit_code_max_gb_<%= t.id %>" placeholder="Go (0=global)" class="form-control" style="width:100px; padding:4px 8px; font-size:11px;" />
+                  </div>
                 </div>
               <% }); %>
             </div>
@@ -421,15 +443,19 @@
         <% extraTemplates.forEach(t => { %>
           var chk = document.getElementById('reseller_edit_code_tmpl_' + <%= t.id %>);
           var inputGb = document.getElementById('reseller_edit_code_max_gb_' + <%= t.id %>);
+          var inputUuid = document.getElementById('reseller_edit_code_uuid_' + <%= t.id %>);
           if (chk) chk.checked = false;
           if (inputGb) inputGb.value = '';
+          if (inputUuid) inputUuid.value = '';
         <% }); %>
         if (c.credentials && Array.isArray(c.credentials)) {
           c.credentials.forEach(function(cr) {
             var chk = document.getElementById('reseller_edit_code_tmpl_' + cr.config_template_id);
             var inputGb = document.getElementById('reseller_edit_code_max_gb_' + cr.config_template_id);
+            var inputUuid = document.getElementById('reseller_edit_code_uuid_' + cr.config_template_id);
             if (chk) chk.checked = true;
             if (inputGb && cr.template_max_data_gb) inputGb.value = cr.template_max_data_gb;
+            if (inputUuid && cr.client_uuid_or_user) inputUuid.value = cr.client_uuid_or_user;
           });
         }
       <% } %>
@@ -440,14 +466,17 @@
     // Live Auto-Refresh Polling for Reseller Access Codes (5s)
     (function() {
       function pollResellerData() {
+        var toggle = document.getElementById('resellerAutoRefreshToggle');
+        if (!toggle || !toggle.checked) return;
+
         fetch('/reseller/access-codes/data').then(function(r) { return r.json(); }).then(function(data) {
           if (!data || !data.accessCodes) return;
 
           if (document.getElementById('resellerOnlineBadge')) {
             document.getElementById('resellerOnlineBadge').innerHTML = '🟢 ' + data.onlineCount + ' Clients En Ligne';
           }
-          if (document.getElementById('resellerQuotaText') && data.resellerQuotaGb !== undefined) {
-            document.getElementById('resellerQuotaText').innerText = data.resellerQuotaGb !== null ? data.resellerQuotaGb.toFixed(2) + ' Go' : 'Illimité';
+          if (document.getElementById('resellerConsumedText') && data.resellerConsumedGb !== undefined) {
+            document.getElementById('resellerConsumedText').innerHTML = data.resellerConsumedGb.toFixed(2) + ' Go <span style="font-size:13px; color:#94A3B8; font-weight:500;">/ ' + (data.resellerQuotaGb !== null ? data.resellerQuotaGb.toFixed(2) + ' Go Alloués' : 'Illimité') + '</span>';
           }
 
           data.accessCodes.forEach(function(c) {
