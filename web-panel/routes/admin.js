@@ -218,6 +218,48 @@ router.get('/premium-codes', (req, res) => {
   });
 });
 
+router.get('/premium-codes/data', (req, res) => {
+  const accessCodes = db.prepare(`
+    SELECT ac.*, r.username as reseller_username
+    FROM access_codes ac
+    LEFT JOIN resellers r ON ac.reseller_id = r.id
+    ORDER BY ac.id DESC
+  `).all();
+
+  accessCodes.forEach(ac => {
+    ac.credentials = db.prepare(`
+      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
+      FROM code_credentials cc
+      JOIN config_templates ct ON cc.config_template_id = ct.id
+      WHERE cc.access_code_id = ?
+    `).all(ac.id);
+  });
+
+  const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
+  const totalCodesCount = accessCodes.length;
+  let totalConsumedGb = 0;
+  let lockedCount = 0;
+  let expiredCount = 0;
+  let depletedCount = 0;
+
+  accessCodes.forEach(c => {
+    totalConsumedGb += (c.consumed_data_gb || 0);
+    if (c.status === 'locked') lockedCount++;
+    if (c.status === 'expired') expiredCount++;
+    if (c.status === 'depleted') depletedCount++;
+  });
+
+  res.json({
+    accessCodes,
+    onlineCount,
+    totalCodesCount,
+    totalConsumedGb,
+    lockedCount,
+    expiredCount,
+    depletedCount
+  });
+});
+
 router.post('/config-templates', (req, res) => {
   try {
     const { name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass, access_type, is_customizable, is_quota_counted, max_data_gb } = req.body;
@@ -559,9 +601,9 @@ router.post('/access-codes', (req, res) => {
     }
 
     audit.log('admin', req.session.username, 'create_access_code', `Code d'accès Admin généré : ${result.code}`, null);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès créé : ${result.code}`));
+    res.redirect('/admin/premium-codes?success=' + encodeURIComponent(`Code d'accès créé : ${result.code}`));
   } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+    res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
 
@@ -621,9 +663,9 @@ router.post('/access-codes/:id/edit', (req, res) => {
     accessCodesLib.updateAccessCodeTemplates(codeId, templatesList, templateMaxDataGbs, customUuids);
 
     audit.log('admin', req.session.username, 'edit_access_code', `Code d'accès modifié : ${codeRow.code}`, null);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour avec succès.`));
+    res.redirect('/admin/premium-codes?success=' + encodeURIComponent(`Code d'accès ${codeRow.code} mis à jour avec succès.`));
   } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+    res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
 
@@ -633,9 +675,9 @@ router.post('/access-codes/:id/reset-usage', (req, res) => {
     db.prepare("UPDATE access_codes SET consumed_data_gb = 0, status = 'active' WHERE id = ?").run(codeId);
     db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ?").run(codeId);
     audit.log('admin', req.session.username, 'reset_code_usage', `Consommation globale remise à 0 Go pour la clé #${codeId}`, null);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation de la clé d\'accès réinitialisée à 0 Go (Statut Réactivé).'));
+    res.redirect('/admin/premium-codes?success=' + encodeURIComponent('Consommation de la clé d\'accès réinitialisée à 0 Go (Statut Réactivé).'));
   } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+    res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
 
@@ -646,26 +688,9 @@ router.post('/access-codes/:id/reset-server-usage', (req, res) => {
     if (template_id) {
       db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ? AND config_template_id = ?").run(codeId, template_id);
     }
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation du serveur réinitialisée à 0 Go pour cette clé.'));
+    res.redirect('/admin/premium-codes?success=' + encodeURIComponent('Consommation du serveur réinitialisée à 0 Go pour cette clé.'));
   } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
-  }
-});
-
-router.post('/access-codes/:id/reset-data', (req, res) => {
-  try {
-    const codeId = req.params.id;
-    const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeId);
-    if (!codeRow) {
-      return res.redirect('/admin/access-codes?error=' + encodeURIComponent('Code d\'accès non trouvé.'));
-    }
-    db.prepare('UPDATE access_codes SET consumed_data_gb = 0 WHERE id = ?').run(codeId);
-    db.prepare('UPDATE code_credentials SET template_consumed_data_gb = 0 WHERE access_code_id = ?').run(codeId);
-    audit.log('admin', req.session.username, 'reset_code_data', `Data consommée réinitialisée pour le code ${codeRow.code}`);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Data consommée réinitialisée à 0 Go pour le code ${codeRow.code}.`));
-  } catch (err) {
-    console.error('Reset Access Code Data error:', err);
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent('Erreur lors de la réinitialisation de la data.'));
+    res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
 
@@ -678,9 +703,9 @@ router.post('/access-codes/:id/delete', (req, res) => {
     }
     db.prepare('DELETE FROM access_codes WHERE id = ?').run(req.params.id);
     audit.log('admin', req.session.username, 'delete_access_code', `Code Premium ${codeRow ? codeRow.code : req.params.id} supprimé (historique de conso conservé)`, null);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
+    res.redirect('/admin/premium-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
   } catch (e) {
-    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+    res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
 

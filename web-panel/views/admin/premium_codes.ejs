@@ -111,9 +111,13 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; margin-bottom:28px;">
       <div>
         <h1 style="font-size:28px; font-weight:900; margin:0; letter-spacing:-0.5px; background: linear-gradient(135deg, #FFF, #94A3B8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Gestion des Codes Premium</h1>
-        <p style="color:#94A3B8; margin:6px 0 0 0; font-size:14px;">Générez et gérez les clés d'accès Premium avec suivi de la consommation en temps réel et verrouillage HWID.</p>
+        <p style="color:#94A3B8; margin:6px 0 0 0; font-size:14px;">Générez et gérez les clés d'accès Premium avec suivi de la consommation en temps réel et rafraîchissement Live.</p>
       </div>
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:12px; color:#4ADE80; font-weight:700; cursor:pointer; background:rgba(34,197,94,0.1); padding:8px 14px; border-radius:10px; border:1px solid rgba(34,197,94,0.3);">
+          <input type="checkbox" id="autoRefreshToggle" checked style="width:16px; height:16px;" />
+          <span>⚡ Live Refresh (5s)</span>
+        </label>
         <button class="btn-glow btn-glow-success" onclick="openModal('modalCreateCode')">
           🔑 Générer Code Premium
         </button>
@@ -137,7 +141,7 @@
       <!-- CARD 1: Online / Total -->
       <div class="stat-card" style="border-color:rgba(34, 197, 94, 0.4);">
         <div style="font-size:11px; font-weight:700; color:#4ADE80; text-transform:uppercase; margin-bottom:6px;">🟢 Clients En Ligne</div>
-        <div style="font-size:24px; font-weight:900; color:#F8FAFC;">
+        <div style="font-size:24px; font-weight:900; color:#F8FAFC;" id="cardOnlineText">
           <%= onlineCount %> <span style="font-size:14px; color:#94A3B8; font-weight:500;">/ <%= totalCodesCount %></span>
         </div>
       </div>
@@ -145,7 +149,7 @@
       <!-- CARD 2: Total Data Consumed -->
       <div class="stat-card" style="border-color:rgba(56, 189, 248, 0.4);">
         <div style="font-size:11px; font-weight:700; color:#38BDF8; text-transform:uppercase; margin-bottom:6px;">📊 Data Totale Consommée</div>
-        <div style="font-size:24px; font-weight:900; color:#38BDF8;">
+        <div style="font-size:24px; font-weight:900; color:#38BDF8;" id="cardConsumedText">
           <%= totalConsumedGb.toFixed(2) %> <span style="font-size:14px; color:#94A3B8; font-weight:500;">Go</span>
         </div>
       </div>
@@ -153,7 +157,7 @@
       <!-- CARD 3: Locked -->
       <div class="stat-card" style="border-color:rgba(124, 92, 255, 0.4);">
         <div style="font-size:11px; font-weight:700; color:#C4B5FD; text-transform:uppercase; margin-bottom:6px;">🔒 Codes Verrouillés</div>
-        <div style="font-size:24px; font-weight:900; color:#C4B5FD;">
+        <div style="font-size:24px; font-weight:900; color:#C4B5FD;" id="cardLockedText">
           <%= lockedCount %>
         </div>
       </div>
@@ -161,7 +165,7 @@
       <!-- CARD 4: Expired -->
       <div class="stat-card" style="border-color:rgba(245, 158, 11, 0.4);">
         <div style="font-size:11px; font-weight:700; color:#FBBF24; text-transform:uppercase; margin-bottom:6px;">⌛ Codes Expirés</div>
-        <div style="font-size:24px; font-weight:900; color:#FBBF24;">
+        <div style="font-size:24px; font-weight:900; color:#FBBF24;" id="cardExpiredText">
           <%= expiredCount %>
         </div>
       </div>
@@ -169,7 +173,7 @@
       <!-- CARD 5: Depleted -->
       <div class="stat-card" style="border-color:rgba(239, 68, 68, 0.4);">
         <div style="font-size:11px; font-weight:700; color:#F87171; text-transform:uppercase; margin-bottom:6px;">🪫 Quota Épuisé</div>
-        <div style="font-size:24px; font-weight:900; color:#F87171;">
+        <div style="font-size:24px; font-weight:900; color:#F87171;" id="cardDepletedText">
           <%= depletedCount %>
         </div>
       </div>
@@ -208,9 +212,9 @@
                 <th style="padding:12px 10px; text-align:right;">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id="codesTableBody">
               <% accessCodes.forEach(c => { %>
-                <tr style="border-bottom:1px solid var(--border);">
+                <tr style="border-bottom:1px solid var(--border);" id="row_code_<%= c.id %>">
                   <td style="padding:16px 10px; font-weight:800; color:#F8FAFC;">
                     <%= c.client_reference ? c.client_reference : 'Client Général' %>
                   </td>
@@ -221,14 +225,14 @@
                     </div>
                   </td>
                   <td style="padding:16px 10px;"><%= c.reseller_username ? c.reseller_username : 'Administrateur' %></td>
-                  <td style="padding:16px 10px;">
+                  <td style="padding:16px 10px;" id="online_badge_<%= c.id %>">
                     <% if (c.last_seen_at && (Date.now() - c.last_seen_at) < 35000) { %>
                       <span class="badge badge-success" style="box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);">🟢 En Ligne</span>
                     <% } else { %>
                       <span class="badge" style="background:rgba(255,255,255,0.05); color:#94A3B8;">🔴 Hors Ligne</span>
                     <% } %>
                   </td>
-                  <td style="padding:16px 10px;">
+                  <td style="padding:16px 10px;" id="usage_text_<%= c.id %>">
                     <span style="font-weight:800; color:#F8FAFC;"><%= c.consumed_data_gb.toFixed(2) %> Go</span>
                     <span style="color:#94A3B8; font-size:11px;">/ <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %></span>
                   </td>
@@ -236,11 +240,15 @@
                     <%= c.allowed_hwids ? c.allowed_hwids : '🟢 Non verrouillé (1er clic)' %>
                   </td>
                   <td style="padding:16px 10px;"><%= c.expiry_date ? c.expiry_date : 'Jamais' %></td>
-                  <td style="padding:16px 10px;">
+                  <td style="padding:16px 10px;" id="status_badge_<%= c.id %>">
                     <span class="badge badge-<%= c.status === 'active' ? 'success' : 'danger' %>"><%= c.status %></span>
                   </td>
-                  <td style="padding:16px 10px; text-align:right;">
-                    <button class="btn-ghost small" style="color:#38BDF8; margin-right:6px;" onclick='openEditCodeModal(<%- JSON.stringify(c) %>)'>✏️ Éditer</button>
+                  <td style="padding:16px 10px; text-align:right; white-space:nowrap;">
+                    <button class="btn-ghost small" style="color:#A855F7; margin-right:4px;" title="Détails & Consommation par Serveur" onclick='openInfoCodeModal(<%- JSON.stringify(c) %>)'>ℹ️ Info</button>
+                    <form method="POST" action="/admin/access-codes/<%= c.id %>/reset-usage" style="display:inline;" onsubmit="return confirm('Réinitialiser la data consommée de ce code (<%= c.code %>) à 0 Go ?');">
+                      <button class="btn-ghost small" style="color:#F59E0B; margin-right:4px;" type="submit" title="Réinitialiser la Data">🔄 Reset</button>
+                    </form>
+                    <button class="btn-ghost small" style="color:#38BDF8; margin-right:4px;" onclick='openEditCodeModal(<%- JSON.stringify(c) %>)'>✏️ Éditer</button>
                     <form method="POST" action="/admin/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code d\'accès ?');">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
@@ -256,6 +264,44 @@
 
   <!-- Toast Notification -->
   <div id="toastMsg" class="toast-msg">📋 Code copié dans le presse-papier !</div>
+
+  <!-- MODAL INFOS ET CONSOMMATION PAR SERVEUR DU CODE PREMIUM -->
+  <div id="modalInfoCode" class="modal-overlay">
+    <div class="modal-card" style="max-width:680px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="margin:0; font-size:20px; font-weight:900; display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#A855F7; color:#FFF; font-size:15px; font-weight:bold;">i</span>
+          Détails & Consommation par Serveur
+        </h3>
+        <button onclick="closeModal('modalInfoCode')" style="background:none; border:none; color:#94A3B8; cursor:pointer; font-size:22px;">✕</button>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+          <div><span style="color:#94A3B8;">Code Premium :</span> <strong id="infoCodeStr" style="color:#38BDF8; font-family:monospace;"></strong></div>
+          <div><span style="color:#94A3B8;">Référence Client :</span> <strong id="infoClientRef" style="color:#F8FAFC;"></strong></div>
+          <div><span style="color:#94A3B8;">Statut :</span> <span id="infoStatus" class="badge"></span></div>
+          <div><span style="color:#94A3B8;">Date Expiration :</span> <strong id="infoExpiry" style="color:#F8FAFC;"></strong></div>
+          <div><span style="color:#94A3B8;">HWID Appareil :</span> <strong id="infoHwid" style="color:#F8FAFC; font-family:monospace;"></strong></div>
+        </div>
+
+        <div style="margin-top:16px; padding-top:14px; border-top:1px dashed var(--border);">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px;">
+            <span style="color:#94A3B8; font-weight:600;">Consommation Globale Cumulée :</span>
+            <strong id="infoTotalUsage" style="color:#F8FAFC;"></strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Per Server -->
+      <h4 style="font-size:14px; color:#C4B5FD; font-weight:800; margin:0 0 10px 0;">📊 Détail par Serveur Associé</h4>
+      <div id="infoServersContainer" style="max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:12px; padding:12px; background:rgba(0,0,0,0.2);"></div>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:24px;">
+        <button type="button" class="btn-ghost" onclick="closeModal('modalInfoCode')">Fermer</button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL 3: Admin Générer Code Premium -->
   <div id="modalCreateCode" class="modal-overlay">
@@ -365,7 +411,7 @@
 
         <% if (typeof extraTemplates !== 'undefined' && extraTemplates.length > 0) { %>
           <div class="form-group" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
-            <label>Gérer les Serveurs Premium Optionnels Associés (UUID Custom & Limite Data)</label>
+            <label>Gérer les Serveurs Premium Optionnels (UUID Custom & Limite Data)</label>
             <div style="max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:10px; padding:10px; background:rgba(0,0,0,0.3);">
               <% extraTemplates.forEach(t => { %>
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; flex-wrap:wrap;">
@@ -430,6 +476,48 @@
       }
     }
 
+    function openInfoCodeModal(c) {
+      document.getElementById('infoCodeStr').innerText = c.code || '';
+      document.getElementById('infoClientRef').innerText = c.client_reference || 'Client Général';
+      document.getElementById('infoExpiry').innerText = c.expiry_date || 'Jamais';
+      document.getElementById('infoHwid').innerText = c.allowed_hwids || '🟢 Non verrouillé';
+
+      var statusSpan = document.getElementById('infoStatus');
+      statusSpan.innerText = c.status || 'active';
+      statusSpan.className = 'badge badge-' + (c.status === 'active' ? 'success' : 'danger');
+
+      var totalGb = c.consumed_data_gb || 0;
+      var maxGb = c.max_data_gb || 0;
+      document.getElementById('infoTotalUsage').innerText = totalGb.toFixed(2) + ' Go / ' + (maxGb > 0 ? maxGb + ' Go' : 'Illimité');
+
+      var container = document.getElementById('infoServersContainer');
+      container.innerHTML = '';
+
+      if (c.credentials && Array.isArray(c.credentials) && c.credentials.length > 0) {
+        c.credentials.forEach(function(cr) {
+          var sConsumed = cr.consumed_data_gb || 0;
+          var sMax = cr.template_max_data_gb || 0;
+          var div = document.createElement('div');
+          div.style.padding = '8px 10px';
+          div.style.marginBottom = '6px';
+          div.style.background = 'rgba(255,255,255,0.03)';
+          div.style.borderRadius = '8px';
+          div.style.display = 'flex';
+          div.style.justifyContent = 'space-between';
+          div.style.alignItems = 'center';
+          div.style.fontSize = '12px';
+
+          div.innerHTML = '<div><strong style="color:#F8FAFC;">' + (cr.name || 'Serveur') + '</strong> <span class="badge badge-purple" style="font-size:9px;">' + (cr.protocol || '').toUpperCase() + '</span></div>' +
+                          '<div><strong style="color:#38BDF8;">' + sConsumed.toFixed(2) + ' Go</strong> / <span style="color:#94A3B8;">' + (sMax > 0 ? sMax + ' Go' : 'Global Code') + '</span></div>';
+          container.appendChild(div);
+        });
+      } else {
+        container.innerHTML = '<div style="color:#94A3B8; font-size:12px; text-align:center; padding:10px;">Aucun serveur spécifique renseigné.</div>';
+      }
+
+      openModal('modalInfoCode');
+    }
+
     function openEditCodeModal(c) {
       document.getElementById('formEditCode').action = '/admin/access-codes/' + c.id + '/edit';
       document.getElementById('formResetCodeUsage').action = '/admin/access-codes/' + c.id + '/reset-usage';
@@ -462,6 +550,50 @@
 
       openModal('modalEditCode');
     }
+
+    // Live Auto-Refresh Polling (5s)
+    (function() {
+      function pollData() {
+        var toggle = document.getElementById('autoRefreshToggle');
+        if (!toggle || !toggle.checked) return;
+
+        fetch('/admin/premium-codes/data').then(function(r) { return r.json(); }).then(function(data) {
+          if (!data || !data.accessCodes) return;
+
+          if (document.getElementById('cardOnlineText')) {
+            document.getElementById('cardOnlineText').innerHTML = data.onlineCount + ' <span style="font-size:14px; color:#94A3B8; font-weight:500;">/ ' + data.totalCodesCount + '</span>';
+          }
+          if (document.getElementById('cardConsumedText')) {
+            document.getElementById('cardConsumedText').innerHTML = data.totalConsumedGb.toFixed(2) + ' <span style="font-size:14px; color:#94A3B8; font-weight:500;">Go</span>';
+          }
+          if (document.getElementById('cardLockedText')) document.getElementById('cardLockedText').innerText = data.lockedCount;
+          if (document.getElementById('cardExpiredText')) document.getElementById('cardExpiredText').innerText = data.expiredCount;
+          if (document.getElementById('cardDepletedText')) document.getElementById('cardDepletedText').innerText = data.depletedCount;
+
+          data.accessCodes.forEach(function(c) {
+            var isOnline = c.last_seen_at && (Date.now() - c.last_seen_at) < 35000;
+            var onlineBadgeCell = document.getElementById('online_badge_' + c.id);
+            if (onlineBadgeCell) {
+              onlineBadgeCell.innerHTML = isOnline
+                ? '<span class="badge badge-success" style="box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);">🟢 En Ligne</span>'
+                : '<span class="badge" style="background:rgba(255,255,255,0.05); color:#94A3B8;">🔴 Hors Ligne</span>';
+            }
+
+            var usageTextCell = document.getElementById('usage_text_' + c.id);
+            if (usageTextCell) {
+              usageTextCell.innerHTML = '<span style="font-weight:800; color:#F8FAFC;">' + (c.consumed_data_gb || 0).toFixed(2) + ' Go</span> <span style="color:#94A3B8; font-size:11px;">/ ' + (c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité') + '</span>';
+            }
+
+            var statusCell = document.getElementById('status_badge_' + c.id);
+            if (statusCell) {
+              statusCell.innerHTML = '<span class="badge badge-' + (c.status === 'active' ? 'success' : 'danger') + '">' + c.status + '</span>';
+            }
+          });
+        }).catch(function() {});
+      }
+
+      setInterval(pollData, 5000);
+    })();
   </script>
 </body>
 </html>

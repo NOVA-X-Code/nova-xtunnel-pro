@@ -1,50 +1,74 @@
 <!DOCTYPE html>
 <html lang="<%= lang %>">
 <head>
-  <%- include('../partials/head', { title: 'Clés d\'Accès Premium - NovaXTunnel Revendeur' }) %>
+  <%- include('../partials/head', { title: 'Mes Clés Premium - NovaXTunnel Revendeur' }) %>
   <style>
-    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 16px; padding: 22px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: all 0.2s ease; }
-    .stat-card:hover { border-color: rgba(124, 92, 255, 0.4); }
-    .stat-title { font-size: 12px; font-weight: 700; color: var(--text-muted, #94A3B8); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-    .stat-value { font-size: 24px; font-weight: 800; color: var(--text, #FFF); }
+    .stat-card {
+      background: rgba(30, 30, 46, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      margin-bottom: 24px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .badge-success { background: rgba(34, 197, 94, 0.15); color: #4ADE80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-warning { background: rgba(245, 158, 11, 0.15); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-purple { background: rgba(124, 92, 255, 0.15); color: #C4B5FD; border: 1px solid rgba(124, 92, 255, 0.3); }
 
-    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-    .badge-success { background: rgba(34, 197, 94, 0.15); color: #22C55E; border: 1px solid rgba(34, 197, 94, 0.3); }
-    .badge-danger { background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .badge-warning { background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); }
-
-    .code-box { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 14px; font-weight: 800; background: rgba(124, 92, 255, 0.12); color: #C4B5FD; padding: 6px 10px; border-radius: 8px; border: 1px dashed rgba(124, 92, 255, 0.3); display: inline-flex; align-items: center; gap: 6px; }
+    .code-box {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      font-weight: 800;
+      background: rgba(124, 92, 255, 0.15);
+      color: #A78BFA;
+      padding: 6px 12px;
+      border-radius: 10px;
+      border: 1px dashed rgba(124, 92, 255, 0.4);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
 
     .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted, #94A3B8); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .form-control { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2A2A3C); background: var(--bg, #12121A); color: var(--text, #F8FAFC); font-size: 13px; outline: none; transition: border-color 0.2s ease; }
-    .form-control:focus { border-color: #7C5CFF; box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.15); }
+    .form-group label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+    .form-control { width: 100%; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; outline: none; }
 
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); justify-content: center; align-items: center; z-index: 9999; padding: 16px; }
-    .modal-card { background: var(--bg-card, #1E1E2E); border: 1px solid var(--border, #2A2A3C); border-radius: 20px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; padding: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); animation: modalFade 0.2s ease; }
-    @keyframes modalFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); justify-content: center; align-items: center; z-index: 9999; padding: 16px; }
+    .modal-card { background: var(--card-bg, #181825); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
 
-    .toast-msg { position: fixed; bottom: 20px; right: 20px; background: #22C55E; color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: none; z-index: 10000; animation: toastIn 0.3s ease; }
-    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .toast-msg { position: fixed; bottom: 24px; right: 24px; background: #22C55E; color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; box-shadow: 0 8px 24px rgba(34, 197, 94, 0.4); display: none; z-index: 10000; }
   </style>
 </head>
 <body>
+
   <%- include('../partials/sidebar') %>
 
   <div class="main-content">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:28px;">
+    <!-- HEADER -->
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:24px;">
       <div>
-        <h1 style="font-size:26px; font-weight:800; margin:0; letter-spacing:-0.5px;">Génération des Clés d'Accès Premium</h1>
-        <p style="color:var(--text-muted); margin:6px 0 0 0; font-size:14px;">Créez des clés d'accès chiffrées avec suivi des appareils (HWID), expiration et quota de données.</p>
+        <h1 style="font-size:24px; font-weight:800; margin:0;">Espace Clés Premium Revendeur</h1>
+        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:13px;">Générez et gérez les clés d'accès pour vos clients.</p>
       </div>
-      <button class="btn-primary" style="background:#22C55E; border:none; padding:10px 18px; font-size:14px;" onclick="openModal('modalCreateCode')">
+      <button class="btn-primary" style="background:#22C55E; border:none; padding:10px 18px; font-weight:700;" onclick="openModal('modalCreateCode')">
         + Générer une Clé Premium
       </button>
     </div>
 
     <% if (typeof error !== 'undefined' && error) { %>
-      <div style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#EF4444; padding:14px 18px; border-radius:12px; margin-bottom:24px; font-weight:600; font-size:14px;">
+      <div style="background:rgba(239,68,68,0.15); border:1px solid #EF4444; color:#F87171; padding:14px 18px; border-radius:12px; margin-bottom:24px; font-weight:600; font-size:14px;">
         ⚠️ <%= error %>
       </div>
     <% } %>
@@ -63,7 +87,7 @@
           <p style="margin:4px 0 0 0; font-size:12px; color:#94A3B8;">Solde total de données utilisable pour créer des clés Premium clients.</p>
         </div>
         <div style="text-align:right;">
-          <span style="font-size:22px; font-weight:900; color:#38BDF8;">
+          <span style="font-size:22px; font-weight:900; color:#38BDF8;" id="resellerQuotaText">
             <%= reseller.data_quota_gb !== null ? reseller.data_quota_gb.toFixed(2) + ' Go' : 'Illimité' %>
           </span>
         </div>
@@ -76,7 +100,7 @@
         <% const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length; %>
         <div style="display:flex; align-items:center; gap:12px;">
           <h3 style="margin:0; font-size:18px; font-weight:800;">Mes Clés Premium Générées</h3>
-          <span class="badge badge-success" style="font-size:11px; padding:5px 12px; box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);">🟢 <%= onlineCount %> Clients En Ligne</span>
+          <span class="badge badge-success" id="resellerOnlineBadge" style="font-size:11px; padding:5px 12px; box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);">🟢 <%= onlineCount %> Clients En Ligne</span>
         </div>
       </div>
 
@@ -109,21 +133,17 @@
                   <td style="padding:14px 10px;">
                     <div style="display:inline-flex; align-items:center; gap:6px;">
                       <span class="code-box"><%= c.code %></span>
-                      <button class="btn-ghost small" onclick="copyCode('<%= c.code %>')" title="Copier le code">📋 Copier</button>
+                      <button class="btn-ghost small" onclick="copyCode('<%= c.code %>')" title="Copier la clé" style="padding:4px 8px; border-radius:6px; cursor:pointer;">📋</button>
                     </div>
                   </td>
-                  <td style="padding:14px 10px;">
+                  <td style="padding:14px 10px;" id="reseller_online_badge_<%= c.id %>">
                     <% if (c.last_seen_at && (Date.now() - c.last_seen_at) < 35000) { %>
                       <span class="badge badge-success" style="box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);">🟢 En Ligne</span>
                     <% } else { %>
                       <span class="badge" style="background:rgba(255,255,255,0.05); color:#94A3B8;">🔴 Hors Ligne</span>
                     <% } %>
                   </td>
-                      <span class="code-box"><%= c.code %></span>
-                      <button class="btn-ghost small" onclick="copyCode('<%= c.code %>')" title="Copier la clé" style="padding:4px 8px; border-radius:6px; cursor:pointer;">📋</button>
-                    </div>
-                  </td>
-                  <td style="padding:14px 10px;">
+                  <td style="padding:14px 10px;" id="reseller_usage_text_<%= c.id %>">
                     <span style="font-weight:700; color:#F8FAFC;"><%= c.consumed_data_gb.toFixed(2) %> Go</span>
                     <span style="color:var(--text-muted); font-size:11px;">/ <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %></span>
                   </td>
@@ -132,17 +152,11 @@
                   </td>
                   <td style="padding:14px 10px;"><%= c.expiry_date ? c.expiry_date : 'Jamais' %></td>
                   <td style="padding:14px 10px;">
-                    <% if (c.status === 'active') { %>
-                      <span class="badge badge-success">Actif</span>
-                    <% } else if (c.status === 'expired') { %>
-                      <span class="badge badge-warning">Expiré</span>
-                    <% } else { %>
-                      <span class="badge badge-danger"><%= c.status %></span>
-                    <% } %>
+                    <span class="badge badge-<%= c.status === 'active' ? 'success' : 'danger' %>"><%= c.status %></span>
                   </td>
                   <td style="padding:14px 10px; text-align:right; white-space:nowrap;">
                     <button class="btn-ghost small" style="color:#A855F7; margin-right:4px;" title="Détails & Consommation par Serveur" onclick='openInfoCodeModal(<%- JSON.stringify(c) %>)'>ℹ️ Info</button>
-                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/reset-data" style="display:inline;" onsubmit="return confirm('Réinitialiser la data consommée de ce code (<%= c.code %>) à 0 Go ?');">
+                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/reset-usage" style="display:inline;" onsubmit="return confirm('Réinitialiser la data consommée de ce code (<%= c.code %>) à 0 Go ?');">
                       <button class="btn-ghost small" style="color:#F59E0B; margin-right:4px;" title="Réinitialiser la Data">🔄 Reset</button>
                     </form>
                     <button class="btn-ghost small" style="color:#38BDF8; margin-right:4px;" onclick='openEditCodeModal(<%- JSON.stringify(c) %>)'>✏️ Éditer</button>
@@ -160,7 +174,7 @@
   </div>
 
   <!-- Toast Notification -->
-  <div id="toastMsg" class="toast-msg">📋 Code copié dans le presse-papier !</div>
+  <div id="toastMsg" class="toast-msg">📋 Clé copiée !</div>
 
   <!-- MODAL 1: Création Code Premium Revendeur -->
   <div id="modalCreateCode" class="modal-overlay">
@@ -178,13 +192,13 @@
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
           <div class="form-group">
-            <label>Enveloppe Data Globale (Go)</label>
-            <input type="number" step="0.5" name="maxDataGb" value="10" required class="form-control" />
+            <label>Enveloppe Data Globale (Go, 0 = Illimité)</label>
+            <input type="number" step="0.5" name="maxDataGb" value="10" class="form-control" />
           </div>
 
           <div class="form-group">
-            <label>Durée de Validité (Jours)</label>
-            <input type="number" name="expiryDays" value="30" required class="form-control" />
+            <label>Date d'Expiration Calendrier (Optionnel)</label>
+            <input type="date" name="expiryDate" class="form-control" />
           </div>
         </div>
 
@@ -235,7 +249,7 @@
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
           <div class="form-group">
-            <label>Plafond Data Globale (Go)</label>
+            <label>Plafond Data Globale (Go, 0 = Illimité)</label>
             <input type="number" step="0.5" name="maxDataGb" id="editCodeMaxDataGb" class="form-control" />
           </div>
 
@@ -317,9 +331,6 @@
             <span style="color:#94A3B8; font-weight:600;">Consommation Globale Cumulée :</span>
             <strong id="infoTotalUsage" style="color:#F8FAFC;"></strong>
           </div>
-          <div style="width:100%; background:rgba(255,255,255,0.1); height:8px; border-radius:4px; overflow:hidden;">
-            <div id="infoTotalProgressBar" style="width:0%; background:linear-gradient(90deg, #38BDF8, #A855F7); height:100%; transition:width 0.3s;"></div>
-          </div>
         </div>
       </div>
 
@@ -328,10 +339,7 @@
         <!-- Populated via JS -->
       </div>
 
-      <div style="display:flex; gap:12px; justify-content:space-between; align-items:center; margin-top:24px;">
-        <form method="POST" id="formResetDataModal" action="" onsubmit="return confirm('Réinitialiser la data consommée de ce code à 0 Go ?');">
-          <button type="submit" class="btn-ghost" style="color:#F59E0B; border:1px solid #F59E0B;">🔄 Réinitialiser la Data à 0 Go</button>
-        </form>
+      <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
         <button type="button" class="btn-ghost" onclick="closeModal('modalInfoCode')">Fermer</button>
       </div>
     </div>
@@ -354,6 +362,48 @@
       setTimeout(function() {
         toast.style.display = 'none';
       }, 2500);
+    }
+
+    function openInfoCodeModal(c) {
+      document.getElementById('infoCodeStr').innerText = c.code || '';
+      document.getElementById('infoClientRef').innerText = c.client_reference || 'Client Général';
+      document.getElementById('infoExpiry').innerText = c.expiry_date || 'Jamais';
+      document.getElementById('infoHwid').innerText = c.allowed_hwids || '🟢 Non verrouillé';
+
+      var statusSpan = document.getElementById('infoStatus');
+      statusSpan.innerText = c.status || 'active';
+      statusSpan.className = 'badge badge-' + (c.status === 'active' ? 'success' : 'danger');
+
+      var totalGb = c.consumed_data_gb || 0;
+      var maxGb = c.max_data_gb || 0;
+      document.getElementById('infoTotalUsage').innerText = totalGb.toFixed(2) + ' Go / ' + (maxGb > 0 ? maxGb + ' Go' : 'Illimité');
+
+      var container = document.getElementById('infoServersList');
+      container.innerHTML = '';
+
+      if (c.credentials && Array.isArray(c.credentials) && c.credentials.length > 0) {
+        c.credentials.forEach(function(cr) {
+          var sConsumed = cr.consumed_data_gb || 0;
+          var sMax = cr.template_max_data_gb || 0;
+          var div = document.createElement('div');
+          div.style.padding = '8px 10px';
+          div.style.marginBottom = '6px';
+          div.style.background = 'rgba(255,255,255,0.03)';
+          div.style.borderRadius = '8px';
+          div.style.display = 'flex';
+          div.style.justifyContent = 'space-between';
+          div.style.alignItems = 'center';
+          div.style.fontSize = '12px';
+
+          div.innerHTML = '<div><strong style="color:#F8FAFC;">' + (cr.name || 'Serveur') + '</strong> <span class="badge badge-purple" style="font-size:9px;">' + (cr.protocol || '').toUpperCase() + '</span></div>' +
+                          '<div><strong style="color:#38BDF8;">' + sConsumed.toFixed(2) + ' Go</strong> / <span style="color:#94A3B8;">' + (sMax > 0 ? sMax + ' Go' : 'Global Code') + '</span></div>';
+          container.appendChild(div);
+        });
+      } else {
+        container.innerHTML = '<div style="color:#94A3B8; font-size:12px; text-align:center; padding:10px;">Aucun serveur spécifique renseigné.</div>';
+      }
+
+      openModal('modalInfoCode');
     }
 
     function openEditCodeModal(c) {
@@ -387,63 +437,38 @@
       openModal('modalEditCode');
     }
 
-    function openInfoCodeModal(c) {
-      document.getElementById('infoCodeStr').innerText = c.code || '';
-      document.getElementById('infoClientRef').innerText = c.client_reference || 'Aucune';
-      document.getElementById('infoExpiry').innerText = c.expiry_date || 'Jamais';
-      document.getElementById('infoHwid').innerText = c.allowed_hwids || '🟢 Non verrouillé (1er clic)';
+    // Live Auto-Refresh Polling for Reseller Access Codes (5s)
+    (function() {
+      function pollResellerData() {
+        fetch('/reseller/access-codes/data').then(function(r) { return r.json(); }).then(function(data) {
+          if (!data || !data.accessCodes) return;
 
-      var statusElem = document.getElementById('infoStatus');
-      statusElem.innerText = c.status || 'active';
-      statusElem.className = 'badge badge-' + (c.status === 'active' ? 'success' : 'danger');
+          if (document.getElementById('resellerOnlineBadge')) {
+            document.getElementById('resellerOnlineBadge').innerHTML = '🟢 ' + data.onlineCount + ' Clients En Ligne';
+          }
+          if (document.getElementById('resellerQuotaText') && data.resellerQuotaGb !== undefined) {
+            document.getElementById('resellerQuotaText').innerText = data.resellerQuotaGb !== null ? data.resellerQuotaGb.toFixed(2) + ' Go' : 'Illimité';
+          }
 
-      var consumed = parseFloat(c.consumed_data_gb) || 0;
-      var maxData = parseFloat(c.max_data_gb) || 0;
-      var totalUsageStr = consumed.toFixed(2) + ' Go / ' + (maxData > 0 ? maxData + ' Go' : 'Illimité');
-      document.getElementById('infoTotalUsage').innerText = totalUsageStr;
+          data.accessCodes.forEach(function(c) {
+            var isOnline = c.last_seen_at && (Date.now() - c.last_seen_at) < 35000;
+            var onlineBadgeCell = document.getElementById('reseller_online_badge_' + c.id);
+            if (onlineBadgeCell) {
+              onlineBadgeCell.innerHTML = isOnline
+                ? '<span class="badge badge-success" style="box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);">🟢 En Ligne</span>'
+                : '<span class="badge" style="background:rgba(255,255,255,0.05); color:#94A3B8;">🔴 Hors Ligne</span>';
+            }
 
-      var pct = maxData > 0 ? Math.min(100, Math.round((consumed / maxData) * 100)) : (consumed > 0 ? 100 : 0);
-      document.getElementById('infoTotalProgressBar').style.width = pct + '%';
-
-      var formReset = document.getElementById('formResetDataModal');
-      if (formReset) {
-        formReset.action = '/reseller/access-codes/' + c.id + '/reset-data';
+            var usageCell = document.getElementById('reseller_usage_text_' + c.id);
+            if (usageCell) {
+              usageCell.innerHTML = '<span style="font-weight:700; color:#F8FAFC;">' + (c.consumed_data_gb || 0).toFixed(2) + ' Go</span> <span style="color:var(--text-muted); font-size:11px;">/ ' + (c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité') + '</span>';
+            }
+          });
+        }).catch(function() {});
       }
 
-      var listContainer = document.getElementById('infoServersList');
-      listContainer.innerHTML = '';
-
-      if (c.credentials && Array.isArray(c.credentials) && c.credentials.length > 0) {
-        c.credentials.forEach(function(cr) {
-          var sConsumed = parseFloat(cr.template_consumed_data_gb) || 0;
-          var sMax = parseFloat(cr.template_max_data_gb) || 0;
-          var sPct = sMax > 0 ? Math.min(100, Math.round((sConsumed / sMax) * 100)) : (maxData > 0 ? Math.min(100, Math.round((consumed / maxData) * 100)) : 0);
-
-          var itemDiv = document.createElement('div');
-          itemDiv.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px;';
-          itemDiv.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <div>
-                <strong style="color:#F8FAFC; font-size:13px;">${cr.name || 'Serveur'}</strong>
-                <span class="badge badge-purple" style="font-size:10px; padding:2px 6px; margin-left:6px;">${(cr.protocol || 'SSH').toUpperCase()}</span>
-              </div>
-              <div style="font-size:12px; font-weight:700; color:#38BDF8;">
-                ${sConsumed.toFixed(2)} Go / ${sMax > 0 ? sMax + ' Go (Spécifique)' : (maxData > 0 ? maxData + ' Go (Plafond Global)' : 'Illimité')}
-              </div>
-            </div>
-            ${cr.client_uuid_or_user ? `<div style="font-size:11px; color:#94A3B8; font-family:monospace; margin-bottom:6px;">UUID/User: ${cr.client_uuid_or_user}</div>` : ''}
-            <div style="width:100%; background:rgba(255,255,255,0.08); height:6px; border-radius:3px; overflow:hidden;">
-              <div style="width:${sPct}%; background:${sPct >= 90 ? '#EF4444' : '#38BDF8'}; height:100%;"></div>
-            </div>
-          `;
-          listContainer.appendChild(itemDiv);
-        });
-      } else {
-        listContainer.innerHTML = '<div style="color:#94A3B8; font-size:13px; text-align:center; padding:12px;">Aucun serveur optionnel spécifique configuré pour ce code.</div>';
-      }
-
-      openModal('modalInfoCode');
-    }
+      setInterval(pollResellerData, 5000);
+    })();
   </script>
 </body>
 </html>
