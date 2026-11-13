@@ -1,4 +1,18 @@
 <%- include('../partials/head', { title: t('system.title') + ' — NOVA XTUNNEL' }) %>
+<%
+  function formatRawBytes(bytes) {
+    if (bytes == null || isNaN(bytes)) return '0 octets';
+    const units = ['octets', 'Ko', 'Mo', 'Go', 'To', 'Po'];
+    let absBytes = Math.abs(bytes);
+    let idx = 0;
+    while (absBytes >= 1024 && idx < units.length - 1) {
+      absBytes /= 1024;
+      idx++;
+    }
+    const rounded = idx === 0 ? Math.round(absBytes) : parseFloat(absBytes.toFixed(absBytes < 10 ? 2 : 1));
+    return (bytes < 0 ? '-' : '') + rounded + ' ' + units[idx];
+  }
+%>
 <div class="shell">
   <%- include('../partials/sidebar', { role: 'admin' }) %>
 
@@ -52,13 +66,12 @@
             <div class="stat-label">⬆️ <%= t('system.traffic.upload') %></div>
             <div class="stat-value" id="traffic-tx-rate">—</div>
           </div>
-          <% const format = require('../../lib/format'); %>
           <div class="stat-card">
             <div class="stat-label"><%= t('system.traffic.total_since_boot') %></div>
             <div class="stat-value" style="font-size:14px;" id="traffic-totals">
-              ⬇️ <%= totals.rx != null ? format.formatRawBytes(totals.rx, lang) : '—' %>
+              ⬇️ <%= totals.rx != null ? formatRawBytes(totals.rx) : '—' %>
               &nbsp;/&nbsp;
-              ⬆️ <%= totals.tx != null ? format.formatRawBytes(totals.tx, lang) : '—' %>
+              ⬆️ <%= totals.tx != null ? formatRawBytes(totals.tx) : '—' %>
             </div>
           </div>
         </div>
