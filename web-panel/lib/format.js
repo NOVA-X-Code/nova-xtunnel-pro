@@ -26,4 +26,21 @@ function formatDataSize(gb, lang) {
   return `${sign}${rounded} ${units[idx]}`;
 }
 
-module.exports = { formatDataSize };
+function formatRawBytes(bytes, lang) {
+  if (bytes == null || !Number.isFinite(bytes)) return '0 octets';
+  const units = UNITS[lang] || UNITS.fr;
+
+  const sign = bytes < 0 ? '-' : '';
+  let absBytes = Math.abs(bytes);
+
+  let idx = 0;
+  while (absBytes >= 1024 && idx < units.length - 1) {
+    absBytes /= 1024;
+    idx += 1;
+  }
+
+  const rounded = idx === 0 ? Math.round(absBytes) : parseFloat(absBytes.toFixed(absBytes < 10 ? 2 : 1));
+  return `${sign}${rounded} ${units[idx]}`;
+}
+
+module.exports = { formatDataSize, formatRawBytes };

@@ -52,12 +52,13 @@
             <div class="stat-label">⬆️ <%= t('system.traffic.upload') %></div>
             <div class="stat-value" id="traffic-tx-rate">—</div>
           </div>
+          <% const format = require('../../lib/format'); %>
           <div class="stat-card">
             <div class="stat-label"><%= t('system.traffic.total_since_boot') %></div>
             <div class="stat-value" style="font-size:14px;" id="traffic-totals">
-              ⬇️ <%= totals.rx != null ? (Math.round(totals.rx / 1024 / 1024)) + ' MB' : '—' %>
+              ⬇️ <%= totals.rx != null ? format.formatRawBytes(totals.rx, lang) : '—' %>
               &nbsp;/&nbsp;
-              ⬆️ <%= totals.tx != null ? (Math.round(totals.tx / 1024 / 1024)) + ' MB' : '—' %>
+              ⬆️ <%= totals.tx != null ? format.formatRawBytes(totals.tx, lang) : '—' %>
             </div>
           </div>
         </div>
@@ -120,13 +121,26 @@
       return Math.round(kbps) + ' KB/s';
     }
 
+    function fmtBytes(bytes) {
+      if (bytes == null || isNaN(bytes)) return '0 Ko';
+      var units = ['octets', 'Ko', 'Mo', 'Go', 'To', 'Po'];
+      var absBytes = Math.abs(bytes);
+      var idx = 0;
+      while (absBytes >= 1024 && idx < units.length - 1) {
+        absBytes /= 1024;
+        idx++;
+      }
+      var rounded = idx === 0 ? Math.round(absBytes) : parseFloat(absBytes.toFixed(absBytes < 10 ? 2 : 1));
+      return (bytes < 0 ? '-' : '') + rounded + ' ' + units[idx];
+    }
+
     function poll() {
       fetch('/admin/system/traffic').then(function (r) { return r.json(); }).then(function (data) {
         if (!data || data.error || !data.rate) return;
         rxEl.textContent = fmtRate(data.rate.rxBps);
         txEl.textContent = fmtRate(data.rate.txBps);
         if (totalsEl && data.totals) {
-          totalsEl.innerHTML = '⬇️ ' + Math.round(data.totals.rx / 1024 / 1024) + ' MB &nbsp;/&nbsp; ⬆️ ' + Math.round(data.totals.tx / 1024 / 1024) + ' MB';
+          totalsEl.innerHTML = '⬇️ ' + fmtBytes(data.totals.rx) + ' &nbsp;/&nbsp; ⬆️ ' + fmtBytes(data.totals.tx);
         }
       }).catch(function () {});
     }

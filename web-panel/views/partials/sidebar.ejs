@@ -27,7 +27,8 @@
     <div class="nav-label"><%= t('nav.admin_group') %></div>
     <a class="nav-link <%= currentPath === '/admin/system' ? 'active' : '' %>" href="/admin/system"><%= t('nav.system') %></a>
     <a class="nav-link <%= currentPath === '/admin' ? 'active' : '' %>" href="/admin">Resellers Serveurs</a>
-    <a class="nav-link <%= currentPath === '/admin/access-codes' ? 'active' : '' %>" href="/admin/access-codes">Codes & Inbounds</a>
+    <a class="nav-link <%= currentPath === '/admin/access-codes' ? 'active' : '' %>" href="/admin/access-codes">App Server</a>
+    <a class="nav-link <%= currentPath === '/admin/premium-codes' ? 'active' : '' %>" href="/admin/premium-codes">Code Premium</a>
   </div>
   <% } else { %>
   <div class="nav-group">

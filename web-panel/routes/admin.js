@@ -149,24 +149,8 @@ router.post('/resellers/:id/delete', (req, res) => {
 });
 
 router.get('/access-codes', (req, res) => {
-  const templates = db.prepare('SELECT * FROM config_templates ORDER BY id DESC').all();
-  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0').all();
-  const accessCodes = db.prepare(`
-    SELECT ac.*, r.username as reseller_username
-    FROM access_codes ac
-    LEFT JOIN resellers r ON ac.reseller_id = r.id
-    ORDER BY ac.id DESC
-  `).all();
-
-  // Attach credentials to each access code so edit modal & info modal can display server details & per-server data
-  accessCodes.forEach(ac => {
-    ac.credentials = db.prepare(`
-      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
-      FROM code_credentials cc
-      JOIN config_templates ct ON cc.config_template_id = ct.id
-      WHERE cc.access_code_id = ?
-    `).all(ac.id);
-  });
+  const templates = db.prepare('SELECT * FROM config_templates ORDER BY sort_order ASC, id DESC').all();
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 ORDER BY sort_order ASC, id DESC').all();
   const notifications = db.prepare('SELECT * FROM broadcast_notifications ORDER BY id DESC').all();
 
   const appSettingsRows = db.prepare('SELECT * FROM app_settings').all();
@@ -176,9 +160,58 @@ router.get('/access-codes', (req, res) => {
   res.render('admin/access_codes', {
     templates,
     extraTemplates,
-    accessCodes,
     notifications,
     appSettings,
+    domain: config.DOMAIN || req.hostname,
+    error: req.query.error,
+    success: req.query.success
+  });
+});
+
+router.get('/premium-codes', (req, res) => {
+  const accessCodes = db.prepare(`
+    SELECT ac.*, r.username as reseller_username
+    FROM access_codes ac
+    LEFT JOIN resellers r ON ac.reseller_id = r.id
+    ORDER BY ac.id DESC
+  `).all();
+
+  // Attach credentials to each access code
+  accessCodes.forEach(ac => {
+    ac.credentials = db.prepare(`
+      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
+      FROM code_credentials cc
+      JOIN config_templates ct ON cc.config_template_id = ct.id
+      WHERE cc.access_code_id = ?
+    `).all(ac.id);
+  });
+
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 ORDER BY sort_order ASC, id DESC').all();
+
+  // Summary Metrics
+  const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
+  const totalCodesCount = accessCodes.length;
+  let totalConsumedGb = 0;
+  let lockedCount = 0;
+  let expiredCount = 0;
+  let depletedCount = 0;
+
+  accessCodes.forEach(c => {
+    totalConsumedGb += (c.consumed_data_gb || 0);
+    if (c.status === 'locked') lockedCount++;
+    if (c.status === 'expired') expiredCount++;
+    if (c.status === 'depleted') depletedCount++;
+  });
+
+  res.render('admin/premium_codes', {
+    accessCodes,
+    extraTemplates,
+    onlineCount,
+    totalCodesCount,
+    totalConsumedGb,
+    lockedCount,
+    expiredCount,
+    depletedCount,
     domain: config.DOMAIN || req.hostname,
     error: req.query.error,
     success: req.query.success
@@ -439,6 +472,39 @@ router.post('/config-templates/:id/delete', (req, res) => {
   try {
     db.prepare('DELETE FROM config_templates WHERE id = ?').run(req.params.id);
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Template supprimé.'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/config-templates/:id/reorder', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { direction } = req.body;
+    const current = db.prepare('SELECT id, sort_order FROM config_templates WHERE id = ?').get(id);
+    if (!current) return res.redirect('/admin/access-codes');
+
+    const currentOrder = current.sort_order || 0;
+
+    if (direction === 'up') {
+      const prev = db.prepare('SELECT id, sort_order FROM config_templates WHERE (sort_order < ? OR (sort_order = ? AND id > ?)) AND id != ? ORDER BY sort_order DESC, id DESC LIMIT 1').get(currentOrder, currentOrder, current.id, current.id);
+      if (prev) {
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(prev.sort_order, current.id);
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder, prev.id);
+      } else {
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder - 1, current.id);
+      }
+    } else if (direction === 'down') {
+      const next = db.prepare('SELECT id, sort_order FROM config_templates WHERE (sort_order > ? OR (sort_order = ? AND id < ?)) AND id != ? ORDER BY sort_order ASC, id ASC LIMIT 1').get(currentOrder, currentOrder, current.id, current.id);
+      if (next) {
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(next.sort_order, current.id);
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder, next.id);
+      } else {
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder + 1, current.id);
+      }
+    }
+    audit.log('admin', req.session.username, 'reorder_template', `Ordre de tri modifié pour le serveur #${id}`, id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Ordre d\'affichage du serveur mis à jour.'));
   } catch (e) {
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
   }
