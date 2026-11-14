@@ -63,11 +63,7 @@
         <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:13px;">Générez et gérez les clés d'accès Premium avec suivi de la consommation en temps réel et rafraîchissement Live.</p>
       </div>
       <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-        <label style="display:inline-flex; align-items:center; gap:8px; font-size:12px; color:#4ADE80; font-weight:700; cursor:pointer; background:rgba(34,197,94,0.1); padding:8px 14px; border-radius:10px; border:1px solid rgba(34,197,94,0.3);">
-          <input type="checkbox" id="resellerAutoRefreshToggle" checked style="width:16px; height:16px;" />
-          <span>⚡ Live Refresh (5s)</span>
-        </label>
-        <button class="btn-primary" style="background:#22C55E; border:none; padding:10px 18px; font-weight:700;" onclick="openModal('modalCreateCode')">
+        <button class="btn-glow btn-glow-success" style="padding:10px 18px; font-weight:700;" onclick="openModal('modalCreateCode')">
           + Générer une Clé Premium
         </button>
       </div>
@@ -89,6 +85,7 @@
       let totalConsumedGb = 0;
       accessCodes.forEach(c => { totalConsumedGb += (c.consumed_data_gb || 0); });
       const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
+      const remainingCodesCount = reseller.max_users > 0 ? Math.max(0, reseller.max_users - accessCodes.length) : -1;
     %>
 
     <!-- SUMMARY METRICS CARDS REVENDEUR -->
@@ -108,6 +105,15 @@
           <%= totalConsumedGb.toFixed(2) %> Go <span style="font-size:13px; color:#94A3B8; font-weight:500;">/ <%= reseller.data_quota_gb !== null ? reseller.data_quota_gb.toFixed(2) + ' Go Alloués' : 'Illimité' %></span>
         </div>
       </div>
+
+      <!-- CARD 3: Remaining Codes Allowed by Admin -->
+      <div class="stat-card" style="margin-bottom:0; border-color:rgba(196, 181, 253, 0.4);">
+        <div style="font-size:11px; font-weight:700; color:#C4B5FD; text-transform:uppercase; margin-bottom:6px;">🔑 Clés Restantes à Créer</div>
+        <div style="font-size:24px; font-weight:900; color:#C4B5FD;" id="resellerRemainingCodesText">
+          <%= remainingCodesCount >= 0 ? remainingCodesCount : 'Illimité' %> <span style="font-size:13px; color:#94A3B8; font-weight:500;"><%= reseller.max_users > 0 ? '/ ' + reseller.max_users + ' Max' : '' %></span>
+        </div>
+      </div>
+    </div>
     </div>
 
     <!-- TABLEAU DES CODES GENERES -->
@@ -466,17 +472,17 @@
     // Live Auto-Refresh Polling for Reseller Access Codes (5s)
     (function() {
       function pollResellerData() {
-        var toggle = document.getElementById('resellerAutoRefreshToggle');
-        if (!toggle || !toggle.checked) return;
-
         fetch('/reseller/access-codes/data').then(function(r) { return r.json(); }).then(function(data) {
           if (!data || !data.accessCodes) return;
 
           if (document.getElementById('resellerOnlineBadge')) {
-            document.getElementById('resellerOnlineBadge').innerHTML = '🟢 ' + data.onlineCount + ' Clients En Ligne';
+            document.getElementById('resellerOnlineBadge').innerHTML = data.onlineCount + ' <span style="font-size:14px; color:#94A3B8; font-weight:500;">/ ' + data.totalCodesCount + '</span>';
           }
           if (document.getElementById('resellerConsumedText') && data.resellerConsumedGb !== undefined) {
             document.getElementById('resellerConsumedText').innerHTML = data.resellerConsumedGb.toFixed(2) + ' Go <span style="font-size:13px; color:#94A3B8; font-weight:500;">/ ' + (data.resellerQuotaGb !== null ? data.resellerQuotaGb.toFixed(2) + ' Go Alloués' : 'Illimité') + '</span>';
+          }
+          if (document.getElementById('resellerRemainingCodesText') && data.remainingCodes !== undefined) {
+            document.getElementById('resellerRemainingCodesText').innerHTML = (data.remainingCodes >= 0 ? data.remainingCodes : 'Illimité') + ' <span style="font-size:13px; color:#94A3B8; font-weight:500;">' + (data.maxUsers > 0 ? '/ ' + data.maxUsers + ' Max' : '') + '</span>';
           }
 
           data.accessCodes.forEach(function(c) {

@@ -183,8 +183,13 @@ router.get('/access-codes/data', (req, res) => {
   const accessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
 
   let resellerConsumedGb = reseller.consumed_quota_gb || 0;
+  let expiredCount = 0;
+  let depletedCount = 0;
+
   accessCodes.forEach(ac => {
     resellerConsumedGb += (ac.consumed_data_gb || 0);
+    if (ac.status === 'expired') expiredCount++;
+    if (ac.status === 'depleted') depletedCount++;
     ac.credentials = db.prepare(`
       SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
       FROM code_credentials cc
@@ -194,12 +199,18 @@ router.get('/access-codes/data', (req, res) => {
   });
 
   const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
+  const remainingCodes = reseller.max_users > 0 ? Math.max(0, reseller.max_users - accessCodes.length) : -1;
 
   res.json({
     accessCodes,
     onlineCount,
+    totalCodesCount: accessCodes.length,
+    expiredCount,
+    depletedCount,
     resellerConsumedGb,
-    resellerQuotaGb: reseller.data_quota_gb
+    resellerQuotaGb: reseller.data_quota_gb,
+    maxUsers: reseller.max_users,
+    remainingCodes
   });
 });
 
@@ -209,6 +220,11 @@ router.post('/access-codes', (req, res) => {
 
   if (reseller.can_create_codes === 0) {
     return res.redirect('/reseller?error=' + encodeURIComponent('Accès refusé : La génération de codes Premium n\'est pas autorisée pour votre compte.'));
+  }
+
+  const currentCodesCount = db.prepare('SELECT COUNT(*) AS c FROM access_codes WHERE reseller_id = ?').get(reseller.id).c;
+  if (reseller.max_users > 0 && currentCodesCount >= reseller.max_users) {
+    return res.redirect('/reseller/access-codes?error=' + encodeURIComponent(`Accès refusé : Limite maximale de ${reseller.max_users} clés autorisées par l'administrateur atteinte. Supprimez un ancien code pour en créer un nouveau.`));
   }
 
   if (reseller.data_quota_gb !== null && reseller.data_quota_gb <= 0) {
