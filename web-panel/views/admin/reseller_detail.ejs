@@ -121,6 +121,64 @@
       allowedProtocols: protocols.filter(p => JSON.parse(reseller.protocols||'[]').includes(p.key))
     }) %>
 
+    <% if (reseller.can_create_codes !== 0 && typeof resellerAccessCodes !== 'undefined') { %>
+      <div class="panel" style="margin-top:20px;">
+        <div class="panel-head">
+          <h2 style="display:flex; align-items:center; gap:8px;">
+            🔑 Clés Premium de ce Revendeur (<%= resellerAccessCodes.length %>)
+          </h2>
+        </div>
+
+        <% if (resellerAccessCodes.length === 0) { %>
+          <p class="muted">Ce revendeur n'a généré aucune clé Premium pour le moment.</p>
+        <% } else { %>
+          <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border); color:#94A3B8; text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">
+                  <th style="padding:12px 10px;">Référence Client</th>
+                  <th style="padding:12px 10px;">Clé Premium</th>
+                  <th style="padding:12px 10px;">Activité</th>
+                  <th style="padding:12px 10px;">Consommation Data</th>
+                  <th style="padding:12px 10px;">Empreinte HWID</th>
+                  <th style="padding:12px 10px;">Expiration</th>
+                  <th style="padding:12px 10px;">Statut</th>
+                  <th style="padding:12px 10px; text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% resellerAccessCodes.forEach(c => { %>
+                  <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:14px 10px; font-weight:700;"><%= c.client_reference ? c.client_reference : 'Client Général' %></td>
+                    <td style="padding:14px 10px;"><span class="mono" style="color:#A78BFA; font-weight:800;"><%= c.code %></span></td>
+                    <td style="padding:14px 10px;">
+                      <% if (c.last_seen_at && (Date.now() - c.last_seen_at) < 35000) { %>
+                        <span class="pill active">🟢 En Ligne</span>
+                      <% } else { %>
+                        <span class="pill muted">🔴 Hors Ligne</span>
+                      <% } %>
+                    </td>
+                    <td style="padding:14px 10px;"><strong><%= c.consumed_data_gb.toFixed(2) %> Go</strong> / <%= c.max_data_gb > 0 ? c.max_data_gb + ' Go' : 'Illimité' %></td>
+                    <td style="padding:14px 10px; font-family:monospace; color:#94A3B8;"><%= c.allowed_hwids ? c.allowed_hwids : '🟢 Non verrouillé' %></td>
+                    <td style="padding:14px 10px;"><%= c.expiry_date ? c.expiry_date : 'Jamais' %></td>
+                    <td style="padding:14px 10px;"><span class="pill <%= c.status === 'active' ? 'active' : 'deleted' %>"><%= c.status %></span></td>
+                    <td style="padding:14px 10px; text-align:right; white-space:nowrap;">
+                      <form method="POST" action="/admin/access-codes/<%= c.id %>/reset-usage" style="display:inline;" onsubmit="return confirm('Réinitialiser la data consommée de cette clé à 0 Go ?');">
+                        <button class="btn small subtle" style="color:#F59E0B;" type="submit">🔄 Reset</button>
+                      </form>
+                      <form method="POST" action="/admin/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code Premium ?');">
+                        <button class="btn small danger" type="submit">Supprimer</button>
+                      </form>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+
     <%- include('../partials/deleted_clients', { deletedClients }) %>
     <%- include('../partials/activity_log', { activity, activityTitle: t('detail.activity_title') }) %>
   </div>

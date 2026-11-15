@@ -75,8 +75,19 @@ router.get('/resellers/:id', (req, res) => {
   const deletedClients = clientsLib.getDeletedClients(reseller.id);
   const activity = audit.recent(reseller.id, 10);
 
+  const resellerAccessCodes = db.prepare('SELECT * FROM access_codes WHERE reseller_id = ? ORDER BY id DESC').all(reseller.id);
+  resellerAccessCodes.forEach(ac => {
+    ac.credentials = db.prepare(`
+      SELECT cc.*, ct.name, ct.protocol, ct.server_ip, ct.server_port, ct.max_data_gb as template_default_max_gb
+      FROM code_credentials cc
+      JOIN config_templates ct ON cc.config_template_id = ct.id
+      WHERE cc.access_code_id = ?
+    `).all(ac.id);
+  });
+  const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 ORDER BY sort_order ASC, id DESC').all();
+
   res.render('admin/reseller_detail', {
-    reseller, stats, clients: clientsWithUsage, deletedClients, activity, protocols: config.PROTOCOLS,
+    reseller, stats, clients: clientsWithUsage, resellerAccessCodes, extraTemplates, deletedClients, activity, protocols: config.PROTOCOLS,
     error: req.query.error, success: req.query.success
   });
 });
@@ -173,6 +184,7 @@ router.get('/premium-codes', (req, res) => {
     SELECT ac.*, r.username as reseller_username
     FROM access_codes ac
     LEFT JOIN resellers r ON ac.reseller_id = r.id
+    WHERE ac.reseller_id IS NULL
     ORDER BY ac.id DESC
   `).all();
 
@@ -188,7 +200,7 @@ router.get('/premium-codes', (req, res) => {
 
   const extraTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 0 ORDER BY sort_order ASC, id DESC').all();
 
-  // Summary Metrics
+  // Summary Metrics Admin
   const onlineCount = accessCodes.filter(c => c.last_seen_at && (Date.now() - c.last_seen_at) < 35000).length;
   const totalCodesCount = accessCodes.length;
   let totalConsumedGb = 0;
@@ -223,6 +235,7 @@ router.get('/premium-codes/data', (req, res) => {
     SELECT ac.*, r.username as reseller_username
     FROM access_codes ac
     LEFT JOIN resellers r ON ac.reseller_id = r.id
+    WHERE ac.reseller_id IS NULL
     ORDER BY ac.id DESC
   `).all();
 

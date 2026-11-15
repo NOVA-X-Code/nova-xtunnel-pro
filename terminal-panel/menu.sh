@@ -3510,7 +3510,7 @@ _write_pyproxy_script() {
     cat > "$PYPROXY_SCRIPT" <<'PYEOF'
 #!/usr/bin/env python3
 # encoding: utf-8
-# NOVA XTUNNEL - CONNECT/SOCKS-over-HTTP tunnel (Python 3 port of proxy.py / wsproxy.py)
+# NOVA XTUNNEL - CONNECT/SOCKS-over-HTTP & WebSocket proxy (Cloudflare / CloudFront ready)
 import socket
 import threading
 import select
@@ -3606,9 +3606,19 @@ class ConnectionHandler(threading.Thread):
     def run(self):
         try:
             client_buffer = self.client.recv(BUFLEN)
+
+            # Log real IP if CF-Connecting-IP (Cloudflare) or X-Forwarded-For (CloudFront) is present
+            real_ip = self.find_header(client_buffer, b'CF-Connecting-IP')
+            if not real_ip:
+                real_ip = self.find_header(client_buffer, b'X-Forwarded-For')
+            if real_ip:
+                self.log += ' (Real IP: ' + real_ip.split(',')[0].strip() + ')'
+
             host_port = self.find_header(client_buffer, b'X-Real-Host')
             if not host_port:
-                host_port = self.server.default_host
+                host_port = self.find_header(client_buffer, b'Host')
+                if not host_port or ':' not in host_port:
+                    host_port = self.server.default_host
 
             if self.find_header(client_buffer, b'X-Split'):
                 self.client.recv(BUFLEN)
@@ -3627,15 +3637,18 @@ class ConnectionHandler(threading.Thread):
 
     @staticmethod
     def find_header(head, header):
-        idx = head.find(header + b': ')
+        head_lower = head.lower()
+        header_lower = header.lower() + b':'
+        idx = head_lower.find(header_lower)
         if idx == -1:
             return ''
-        idx = head.find(b':', idx)
-        head = head[idx + 2:]
-        end = head.find(b'\r\n')
+        idx_val_start = idx + len(header_lower)
+        while idx_val_start < len(head) and head[idx_val_start:idx_val_start+1] in (b' ', b'\t'):
+            idx_val_start += 1
+        end = head.find(b'\r\n', idx_val_start)
         if end == -1:
             return ''
-        return head[:end].decode(errors='ignore')
+        return head[idx_val_start:end].decode(errors='ignore').strip()
 
     def connect_target(self, host):
         i = host.find(':')
@@ -3690,15 +3703,18 @@ class ConnectionHandler(threading.Thread):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='NOVA XTUNNEL - PY SOCKS/WS proxy')
+    parser = argparse.ArgumentParser(description='NOVA XTUNNEL - PY SOCKS/WS proxy (Cloudflare/CloudFront)')
     parser.add_argument('-b', '--bind', default='0.0.0.0')
     parser.add_argument('-p', '--port', type=int, required=True)
     parser.add_argument('--response-code', default='101')
-    parser.add_argument('--response-msg', default='@NOVAXTUNNEL')
+    parser.add_argument('--response-msg', default='@Labokingfreesurf')
     parser.add_argument('--default-host', default='127.0.0.1:22')
     args = parser.parse_args()
 
-    response = "HTTP/1.1 {} {}\r\n\r\n".format(args.response_code, args.response_msg)
+    if str(args.response_code) == '101':
+        response = "HTTP/1.1 101 {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n".format(args.response_msg)
+    else:
+        response = "HTTP/1.1 {} {}\r\n\r\n".format(args.response_code, args.response_msg)
 
     print("NOVA XTUNNEL PY Proxy - listening on {}:{}".format(args.bind, args.port))
     server = Server(args.bind, args.port, response, args.default_host)
@@ -3720,7 +3736,7 @@ PYEOF
 }
 
 install_pyproxy() {
-    echo -e "\n${C_BOLD}${C_PURPLE}--- 🐍 Install PY SOCKS/WS Proxy (legacy) ---${C_RESET}"
+    echo -e "\n${C_BOLD}${C_PURPLE}--- 🐍 Install PY SOCKS/WS Proxy (Cloudflare / CloudFront ready) ---${C_RESET}"
 
     if [ -f "$PYPROXY_SOCKS_SERVICE" ] || [ -f "$PYPROXY_WS_SERVICE" ]; then
         echo -e "${C_YELLOW}ℹ️ PY SOCKS/WS Proxy is already installed.${C_RESET}"
@@ -3736,8 +3752,8 @@ install_pyproxy() {
     local socks_port ws_port
     read -p "👉 Port for SOCKS/CONNECT proxy (HTTP 200 response) [8888]: " socks_port
     socks_port=${socks_port:-8888}
-    read -p "👉 Port for WebSocket-style proxy (HTTP 101 response) [444]: " ws_port
-    ws_port=${ws_port:-444}
+    read -p "👉 Port for WebSocket-style proxy (HTTP 101 response, Cloudflare/CloudFront ready) [8080]: " ws_port
+    ws_port=${ws_port:-8080}
 
     for p in "$socks_port" "$ws_port"; do
         if ! [[ "$p" =~ ^[0-9]+$ ]] || [ "$p" -lt 1 ] || [ "$p" -gt 65535 ]; then
@@ -3775,7 +3791,7 @@ EOF
 
     cat > "$PYPROXY_WS_SERVICE" <<EOF
 [Unit]
-Description=NOVA XTUNNEL PY WebSocket Proxy
+Description=NOVA XTUNNEL PY WebSocket Proxy (Cloudflare/CloudFront)
 After=network.target
 
 [Service]
@@ -3798,9 +3814,9 @@ EOF
     sleep 2
 
     if systemctl is-active --quiet pyproxy-socks.service && systemctl is-active --quiet pyproxy-ws.service; then
-        echo -e "\n${C_GREEN}✅ SUCCESS: PY SOCKS/WS Proxy installed and active.${C_RESET}"
-        echo -e "   - SOCKS proxy port: ${C_YELLOW}$socks_port${C_RESET} (HTTP 200)"
-        echo -e "   - WebSocket proxy port: ${C_YELLOW}$ws_port${C_RESET} (HTTP 101)"
+        echo -e "\n${C_GREEN}✅ SUCCESS: PY SOCKS/WS Proxy (Cloudflare/CloudFront ready) installed and active.${C_RESET}"
+        echo -e "   - SOCKS proxy port: ${C_YELLOW}$socks_port${C_RESET} (HTTP 200 @Labokingfreesurf)"
+        echo -e "   - WebSocket proxy port: ${C_YELLOW}$ws_port${C_RESET} (HTTP 101 @Labokingfreesurf + WS Headers)"
     else
         echo -e "\n${C_RED}❌ ERROR: one of the services failed to start.${C_RESET}"
         journalctl -u pyproxy-socks.service -u pyproxy-ws.service -n 20 --no-pager
