@@ -3421,6 +3421,11 @@ configure_edge_stack() {
 }
 
 update_haproxy_only() {
+    if [ -d "$PYPROXY_DIR" ] || [ -f "$PYPROXY_SCRIPT" ]; then
+        echo -e "${C_BLUE}🐍 Updating Python Proxy script & restarting services...${C_RESET}"
+        _write_pyproxy_script
+        systemctl restart pyproxy-socks.service pyproxy-ws.service 2>/dev/null || true
+    fi
     if [ -f "$HAPROXY_CONFIG" ] && systemctl is-active --quiet haproxy 2>/dev/null; then
         echo -e "${C_BLUE}🔄 Regenerating HAProxy configuration (Nginx left untouched)...${C_RESET}"
         write_haproxy_edge_config
@@ -3633,6 +3638,8 @@ class ConnectionHandler(threading.Thread):
     def run(self):
         try:
             client_buffer = self.client.recv(BUFLEN)
+            if not client_buffer:
+                return
 
             # Log real IP if CF-Connecting-IP (Cloudflare) or X-Forwarded-For (CloudFront) is present
             real_ip = self.find_header(client_buffer, b'CF-Connecting-IP')
@@ -3643,8 +3650,12 @@ class ConnectionHandler(threading.Thread):
 
             host_port = self.find_header(client_buffer, b'X-Real-Host')
             if not host_port:
-                host_port = self.find_header(client_buffer, b'Host')
-                if not host_port or ':' not in host_port:
+                hosts = self.find_all_headers(client_buffer, b'Host')
+                for h in reversed(hosts):
+                    if ':' in h and not h.lower().startswith('auth.'):
+                        host_port = h
+                        break
+                if not host_port:
                     host_port = self.server.default_host
 
             if self.find_header(client_buffer, b'X-Split'):
@@ -3661,6 +3672,28 @@ class ConnectionHandler(threading.Thread):
         finally:
             self.close()
             self.server.remove_conn(self)
+
+    @staticmethod
+    def find_all_headers(head, header):
+        results = []
+        head_lower = head.lower()
+        header_lower = header.lower() + b':'
+        start = 0
+        while True:
+            idx = head_lower.find(header_lower, start)
+            if idx == -1:
+                break
+            idx_val_start = idx + len(header_lower)
+            while idx_val_start < len(head) and head[idx_val_start:idx_val_start+1] in (b' ', b'\t'):
+                idx_val_start += 1
+            end = head.find(b'\r\n', idx_val_start)
+            if end == -1:
+                break
+            val = head[idx_val_start:end].decode(errors='ignore').strip()
+            if val:
+                results.append(val)
+            start = end + 2
+        return results
 
     @staticmethod
     def find_header(head, header):
