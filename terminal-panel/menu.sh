@@ -3985,6 +3985,9 @@ EOF
     # Port Forwarding / Firewall
     echo -e "${C_BLUE}🔥 Configuring Firewall Rules (Redirecting ${ZIVPN_RANGE_START}-${ZIVPN_RANGE_END} -> ${ZIVPN_LISTEN_PORT})...${C_RESET}"
     _ff_rebuild_udp_dnat_rules
+    iptables -A INPUT -i zivpn+ -j ACCEPT 2>/dev/null || true
+    iptables -A INPUT -i tun+ -j ACCEPT 2>/dev/null || true
+    sysctl -w net.ipv4.conf.all.route_localnet=1 >/dev/null 2>&1 || true
     if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
         ufw allow "${ZIVPN_LISTEN_PORT}/udp" >/dev/null
     fi
