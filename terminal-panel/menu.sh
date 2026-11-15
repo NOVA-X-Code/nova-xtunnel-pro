@@ -3223,6 +3223,15 @@ write_haproxy_edge_config() {
     mkdir -p /etc/haproxy
     local crt_args
     crt_args=$(build_haproxy_crt_args)
+    local socks_backend_port="8888"
+    local ws_backend_port="8080"
+    if [ -f "$PYPROXY_CONFIG_FILE" ]; then
+        local p_socks p_ws
+        p_socks=$(grep "^SOCKS_PORT=" "$PYPROXY_CONFIG_FILE" 2>/dev/null | cut -d'=' -f2)
+        p_ws=$(grep "^WS_PORT=" "$PYPROXY_CONFIG_FILE" 2>/dev/null | cut -d'=' -f2)
+        [[ -n "$p_socks" ]] && socks_backend_port="$p_socks"
+        [[ -n "$p_ws" ]] && ws_backend_port="$p_ws"
+    fi
     cat > "$HAPROXY_CONFIG" <<EOF
 global
     log /dev/log local0
@@ -3252,12 +3261,15 @@ frontend port_80_edge
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
+    acl is_ws payload(0,1024) -m sub -i websocket
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
+    tcp-request content accept if is_ws
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
     tcp-request content accept if HTTP
 
+    use_backend direct_ssht if is_ws
     use_backend direct_sshp if is_payload
     default_backend nginx_cleartext
 
@@ -3272,13 +3284,16 @@ frontend port_443_edge
     acl is_ssh payload(0,7) -m bin 5353482d322e30
     acl is_tls req.ssl_hello_type 1
     acl has_web_alpn req.ssl_alpn -m sub h2 http/1.1
+    acl is_ws payload(0,1024) -m sub -i websocket
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
+    tcp-request content accept if is_ws
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
     tcp-request content accept if HTTP
     tcp-request content accept if is_tls
 
+    use_backend direct_ssht if is_ws
     use_backend direct_ssht if is_payload
     use_backend nginx_cleartext if HTTP
     use_backend nginx_tls if is_tls has_web_alpn
@@ -3293,19 +3308,16 @@ frontend internal_decryptor
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    # SSH + SNI + payload: the client does a TLS handshake (any SNI), THEN sends an HTTP
-    # payload inside the tunnel (e.g. "GET / HTTP/1.1 ... Upgrade: websocket" or
-    # "CONNECT host:port") and expects the 101/200 reply followed by the raw SSH stream.
-    # Once decrypted here that payload starts with an HTTP verb - without these rules it
-    # fell through to nginx_cleartext (which just proxies to a web app), so the SSH
-    # handshake never started. Send it to the same payload proxies the plain-text ports use.
+    acl is_ws payload(0,1024) -m sub -i websocket
     acl is_connect payload(0,7) -m sub CONNECT
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
     tcp-request content accept if is_ssh
+    tcp-request content accept if is_ws
     tcp-request content accept if is_payload
     tcp-request content accept if HTTP
 
     use_backend direct_ssh if is_ssh
+    use_backend direct_ssht if is_ws
     use_backend direct_sshp if is_connect
     use_backend direct_ssht if is_payload
     default_backend nginx_cleartext
@@ -3319,11 +3331,11 @@ backend direct_ssh
 
 backend direct_sshp
     mode tcp
-    server ssh_server 127.0.0.1:8888
+    server ssh_server 127.0.0.1:${socks_backend_port}
 
 backend direct_ssht
     mode tcp
-    server ssh_server 127.0.0.1:444
+    server ssh_server 127.0.0.1:${ws_backend_port}
 
 backend nginx_cleartext
     mode tcp
