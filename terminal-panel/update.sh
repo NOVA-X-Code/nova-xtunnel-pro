@@ -12,10 +12,15 @@ echo "Mise à jour de NOVA X Tunnel (panel terminal)..."
 cp "$SCRIPT_DIR/menu.sh" /usr/local/bin/menu
 chmod +x /usr/local/bin/menu
 
+# Safely update HAProxy config if HAProxy is active, leaving Nginx completely untouched
+if command -v haproxy &>/dev/null && systemctl is-active --quiet haproxy 2>/dev/null; then
+    echo "🔄 Actualisation de la configuration HAProxy (Nginx inchangé)..."
+    /usr/local/bin/menu --exec update_haproxy_only || true
+fi
+
 # Falcon Proxy has been removed from the panel entirely - clean up any leftover files from
 # a server that was updated before this removal, so nothing unused lingers on disk.
 rm -rf "$SCRIPT_DIR/falconproxy" /opt/nova-x-tunnel/falconproxy /opt/novaxtunnel/falconproxy 2>/dev/null || true
 
-echo "✅ Commande 'menu' mise à jour."
-echo "(La configuration SSH existante n'est pas retouchée par une mise à jour."
-echo " Pour la réappliquer, relancez install.sh à la place.)"
+echo "✅ Commande 'menu' et services mis à jour sans modifier la configuration Nginx."
+echo "(La configuration SSH existante et vos règles Nginx personnalisées ne sont pas retouchées par la mise à jour.)"

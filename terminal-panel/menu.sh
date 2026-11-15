@@ -3420,6 +3420,22 @@ configure_edge_stack() {
     return 0
 }
 
+update_haproxy_only() {
+    if [ -f "$HAPROXY_CONFIG" ] && systemctl is-active --quiet haproxy 2>/dev/null; then
+        echo -e "${C_BLUE}🔄 Regenerating HAProxy configuration (Nginx left untouched)...${C_RESET}"
+        write_haproxy_edge_config
+        if haproxy -c -f "$HAPROXY_CONFIG" >/dev/null 2>&1; then
+            systemctl reload haproxy 2>/dev/null || systemctl restart haproxy 2>/dev/null
+            echo -e "${C_GREEN}✅ HAProxy configuration reloaded successfully.${C_RESET}"
+        else
+            echo -e "${C_RED}❌ HAProxy configuration test failed.${C_RESET}"
+            haproxy -c -f "$HAPROXY_CONFIG"
+            return 1
+        fi
+    fi
+}
+}
+
 install_ssl_tunnel() {
     clear; show_banner
     echo -e "${C_BOLD}${C_PURPLE}--- 🚀 Installing HAProxy Edge Stack (80/443 -> 8880/8443) ---${C_RESET}"
@@ -6493,7 +6509,8 @@ if [[ "$1" == "--exec" ]]; then
         install_zivpn|uninstall_zivpn|\
         install_slowudp|uninstall_slowudp|\
         install_slowdns|uninstall_slowdns|\
-        torrent_block_enable|torrent_block_disable)
+        torrent_block_enable|torrent_block_disable|\
+        update_haproxy_only)
             "$action" </dev/null
             exit $?
             ;;
