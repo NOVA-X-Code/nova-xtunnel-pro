@@ -3434,7 +3434,6 @@ update_haproxy_only() {
         fi
     fi
 }
-}
 
 install_ssl_tunnel() {
     clear; show_banner
