@@ -3261,7 +3261,7 @@ frontend port_80_edge
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_ws payload(0,1024) -m sub -i websocket
+    acl is_ws payload(0,16384) -m sub -i websocket
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
     tcp-request content accept if is_ws
@@ -3284,7 +3284,7 @@ frontend port_443_edge
     acl is_ssh payload(0,7) -m bin 5353482d322e30
     acl is_tls req.ssl_hello_type 1
     acl has_web_alpn req.ssl_alpn -m sub h2 http/1.1
-    acl is_ws payload(0,1024) -m sub -i websocket
+    acl is_ws payload(0,16384) -m sub -i websocket
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
     tcp-request content accept if is_ws
@@ -3308,7 +3308,7 @@ frontend internal_decryptor
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_ws payload(0,1024) -m sub -i websocket
+    acl is_ws payload(0,16384) -m sub -i websocket
     acl is_connect payload(0,7) -m sub CONNECT
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
     tcp-request content accept if is_ssh
