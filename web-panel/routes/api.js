@@ -54,7 +54,7 @@ router.post('/download-config', verifyAppSignature, (req, res) => {
 
     // Default or Free base config request
     if (!access_code || access_code.trim().length === 0 || access_code.trim().toUpperCase() === 'DEFAULT' || access_code.trim().toUpperCase() === 'FREE') {
-      const baseTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 1').all();
+      const baseTemplates = db.prepare('SELECT * FROM config_templates WHERE is_base_config = 1 AND is_active = 1 ORDER BY sort_order ASC, id DESC').all();
 
       const globalUserRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_ssh_user'").get();
       const globalPassRow = db.prepare("SELECT value FROM app_settings WHERE key = 'default_ssh_pass'").get();
@@ -213,6 +213,9 @@ router.post('/report-usage', verifyAppSignature, (req, res) => {
       if (tmplRow) {
         // Check if server template's shared global quota limit is reached
         if (tmplRow.max_data_gb > 0 && tmplRow.consumed_data_gb >= tmplRow.max_data_gb) {
+          try {
+            db.prepare('UPDATE config_templates SET is_active = 0 WHERE id = ?').run(template_id);
+          } catch (e) {}
           return res.json({
             status: 'depleted',
             is_active: false,

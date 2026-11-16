@@ -113,7 +113,7 @@ function getAccessCodeDetails(codeStr) {
   if (!codeRow) return null;
 
   const creds = db.prepare(`
-    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.default_user, ct.default_pass, ct.is_auto_generated, ct.is_customizable, ct.is_quota_counted, ct.max_data_gb AS template_max_data_gb
+    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.default_user, ct.default_pass, ct.is_auto_generated, ct.is_customizable, ct.is_quota_counted, ct.is_active, ct.max_data_gb AS template_max_data_gb
     FROM code_credentials cc
     JOIN config_templates ct ON cc.config_template_id = ct.id
     WHERE cc.access_code_id = ?
@@ -175,7 +175,8 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   }
 
   for (const c of accessCode.credentials) {
-    // If client reached individual server data limit, omit this server from the list!
+    // If template is inactive/disabled or client reached server data limit, omit this server!
+    if (c.is_active === 0) continue;
     if (c.template_max_data_gb > 0 && (c.consumed_data_gb || 0) >= c.template_max_data_gb) {
       continue;
     }

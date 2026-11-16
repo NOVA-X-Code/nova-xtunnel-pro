@@ -332,6 +332,7 @@
                 <th style="padding:14px 10px;">Payload / Link</th>
                 <th style="padding:14px 10px;">Ordre</th>
                 <th style="padding:14px 10px;">Type d'Accès</th>
+                <th style="padding:14px 10px;">Statut</th>
                 <th style="padding:14px 10px;">Consommation Cumulée</th>
                 <th style="padding:14px 10px; text-align:right;">Actions</th>
               </tr>
@@ -372,6 +373,15 @@
                     <% } else { %>
                       <span class="badge">📦 Optionnel Revendeur</span>
                     <% } %>
+                  </td>
+                  <td style="padding:16px 10px;">
+                    <form method="POST" action="/admin/config-templates/<%= t.id %>/toggle-active" style="display:inline;">
+                      <% if (t.is_active !== 0) { %>
+                        <button type="submit" class="badge badge-success" style="border:none; cursor:pointer;" title="Cliquer pour désactiver">🟢 Actif</button>
+                      <% } else { %>
+                        <button type="submit" class="badge badge-danger" style="border:none; cursor:pointer;" title="Cliquer pour désactiver/réactiver">🔴 Inactif</button>
+                      <% } %>
+                    </form>
                   </td>
                   <td style="padding:16px 10px;">
                     <div style="font-weight:700; color:#F8FAFC;">

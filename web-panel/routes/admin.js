@@ -532,6 +532,29 @@ router.post('/config-templates/:id/delete', (req, res) => {
   }
 });
 
+router.post('/config-templates/:id/toggle-active', (req, res) => {
+  try {
+    const tmpl = db.prepare('SELECT id, is_active FROM config_templates WHERE id = ?').get(req.params.id);
+    if (!tmpl) return res.redirect('/admin/access-codes');
+    const newActive = (tmpl.is_active === 1) ? 0 : 1;
+    db.prepare('UPDATE config_templates SET is_active = ? WHERE id = ?').run(newActive, tmpl.id);
+    audit.log('admin', req.session.username, 'toggle_template_active', `Statut serveur #${tmpl.id} : ${newActive === 1 ? 'Actif' : 'Inactif'}`, tmpl.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Serveur ${newActive === 1 ? 'Activé' : 'Désactivé'}.`));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
+router.post('/config-templates/:id/reset-quota', (req, res) => {
+  try {
+    db.prepare('UPDATE config_templates SET consumed_data_gb = 0, is_active = 1 WHERE id = ?').run(req.params.id);
+    audit.log('admin', req.session.username, 'reset_template_quota', `Quota cumulé du serveur #${req.params.id} réinitialisé à 0 Go (Statut Réactivé)`, req.params.id);
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation cumulée du serveur réinitialisée à 0 Go (Serveur Réactivé).'));
+  } catch (e) {
+    res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
+
 router.post('/config-templates/:id/reorder', (req, res) => {
   try {
     const { id } = req.params;
