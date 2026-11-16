@@ -3261,16 +3261,13 @@ frontend port_80_edge
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_ws payload(0,16384) -m sub -i websocket
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
-    tcp-request content accept if is_ws
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
     tcp-request content accept if HTTP
 
-    use_backend direct_ssht if is_ws
-    use_backend direct_sshp if is_payload
+    use_backend direct_ssht if is_payload
     default_backend nginx_cleartext
 
 # ====================================================================
@@ -3554,13 +3551,15 @@ TIMEOUT = 60
 
 
 class Server(threading.Thread):
-    def __init__(self, host, port, response, default_host):
+    def __init__(self, host, port, response, default_host, response_code='101', response_msg='@Labokingfreesurf'):
         threading.Thread.__init__(self)
         self.running = False
         self.host = host
         self.port = port
         self.response = response
         self.default_host = default_host
+        self.response_code = str(response_code)
+        self.response_msg = str(response_msg)
         self.threads = []
         self.threads_lock = threading.Lock()
         self.log_lock = threading.Lock()
@@ -3675,7 +3674,7 @@ class ConnectionHandler(threading.Thread):
                 self.client.recv(BUFLEN)
 
             if host_port:
-                self.method_connect(host_port)
+                self.method_connect(host_port, client_buffer)
             else:
                 self.server.print_log('- No X-Real-Host!')
                 self.client.send(b'HTTP/1.1 400 NoXRealHost!\r\n\r\n')
@@ -3737,10 +3736,19 @@ class ConnectionHandler(threading.Thread):
         self.target_closed = False
         self.target.connect(address)
 
-    def method_connect(self, path):
+    def method_connect(self, path, client_buffer=b''):
         self.log += ' - CONNECT ' + path
         self.connect_target(path)
-        self.client.sendall(self.server.response.encode())
+
+        buf_lower = client_buffer.lower()
+        if b'websocket' in buf_lower or b'upgrade:' in buf_lower:
+            resp = "HTTP/1.1 101 {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n".format(self.server.response_msg)
+        elif self.server.response_code == '200':
+            resp = "HTTP/1.1 200 {}\r\n\r\n".format(self.server.response_msg)
+        else:
+            resp = "HTTP/1.1 101 {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n".format(self.server.response_msg)
+
+        self.client.sendall(resp.encode())
         self.server.print_log(self.log)
         self.do_connect()
 
@@ -3790,7 +3798,7 @@ def main():
         response = "HTTP/1.1 {} {}\r\n\r\n".format(args.response_code, args.response_msg)
 
     print("NOVA XTUNNEL PY Proxy - listening on {}:{}".format(args.bind, args.port))
-    server = Server(args.bind, args.port, response, args.default_host)
+    server = Server(args.bind, args.port, response, args.default_host, args.response_code, args.response_msg)
     server.start()
     try:
         while True:
