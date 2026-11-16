@@ -374,9 +374,5 @@ router.post('/access-codes/:id/delete', (req, res) => {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
-  } catch (e) {
-    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
-  }
-});
 
 module.exports = router;
