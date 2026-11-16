@@ -3261,15 +3261,15 @@ frontend port_80_edge
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_ws payload(0,16384) -m sub -i websocket
+    acl is_ws_verb payload(0,4) -m sub GET HEAD OPTI PATC
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
-    tcp-request content accept if is_ws
+    tcp-request content accept if is_ws_verb
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
     tcp-request content accept if HTTP
 
-    use_backend direct_ssht if is_ws
+    use_backend direct_ssht if is_ws_verb
     use_backend direct_sshp if is_payload
     default_backend nginx_cleartext
 
@@ -3648,15 +3648,32 @@ class ConnectionHandler(threading.Thread):
             if real_ip:
                 self.log += ' (Real IP: ' + real_ip.split(',')[0].strip() + ')'
 
+            # 1. Check X-Real-Host
             host_port = self.find_header(client_buffer, b'X-Real-Host')
+
+            # 2. Check CONNECT line (e.g. CONNECT 127.0.0.1:22 HTTP/1.1)
+            if not host_port:
+                first_line = client_buffer.split(b'\r\n')[0].decode(errors='ignore')
+                if first_line.startswith('CONNECT '):
+                    parts = first_line.split(' ')
+                    if len(parts) >= 2:
+                        host_port = parts[1]
+
+            # 3. Check Host: headers
             if not host_port:
                 hosts = self.find_all_headers(client_buffer, b'Host')
                 for h in reversed(hosts):
-                    if ':' in h and not h.lower().startswith('auth.'):
+                    if h and not h.lower().startswith('auth.') and not h.lower().startswith('foxnews'):
                         host_port = h
                         break
-                if not host_port:
-                    host_port = self.server.default_host
+
+            # 4. Fallback to default_host
+            if not host_port:
+                host_port = self.server.default_host
+
+            # Append :22 if no port is specified in host
+            if host_port and ':' not in host_port:
+                host_port = host_port + ':22'
 
             if self.find_header(client_buffer, b'X-Split'):
                 self.client.recv(BUFLEN)
@@ -3841,7 +3858,7 @@ After=network.target
 [Service]
 User=root
 Type=simple
-ExecStart=/usr/bin/python3 $PYPROXY_SCRIPT -p $socks_port --response-code 200 --response-msg @Labokingfreesurf --default-host 0.0.0.0:22
+ExecStart=/usr/bin/python3 $PYPROXY_SCRIPT -p $socks_port --response-code 200 --response-msg @Labokingfreesurf --default-host 127.0.0.1:22
 Restart=always
 RestartSec=2s
 
