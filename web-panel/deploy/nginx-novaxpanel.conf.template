@@ -1,6 +1,6 @@
 server {
-    listen __PUBLIC_PORT__ ssl;
-    server_name __DOMAIN__;
+    listen __PUBLIC_PORT__ ssl default_server;
+    server_name __DOMAIN__ _ localhost 127.0.0.1;
 
     ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
