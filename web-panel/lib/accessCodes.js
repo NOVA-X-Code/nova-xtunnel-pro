@@ -66,6 +66,7 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
   }
 
   const allTemplates = Array.from(map.values());
+  allTemplates.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || b.id - a.id);
 
   // Generate unified master credentials for this access code:
   const masterUuid = crypto.randomUUID();
@@ -113,10 +114,11 @@ function getAccessCodeDetails(codeStr) {
   if (!codeRow) return null;
 
   const creds = db.prepare(`
-    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.default_user, ct.default_pass, ct.is_auto_generated, ct.is_customizable, ct.is_quota_counted, ct.is_active, ct.max_data_gb AS template_max_data_gb
+    SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.default_user, ct.default_pass, ct.is_auto_generated, ct.is_customizable, ct.is_quota_counted, ct.is_active, ct.sort_order, ct.max_data_gb AS template_max_data_gb
     FROM code_credentials cc
     JOIN config_templates ct ON cc.config_template_id = ct.id
     WHERE cc.access_code_id = ?
+    ORDER BY ct.sort_order ASC, ct.id DESC
   `).all(codeRow.id);
 
   return { ...codeRow, credentials: creds };
