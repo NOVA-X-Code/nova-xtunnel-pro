@@ -3743,10 +3743,8 @@ class ConnectionHandler(threading.Thread):
         buf_lower = client_buffer.lower()
         if b'websocket' in buf_lower or b'upgrade:' in buf_lower:
             resp = "HTTP/1.1 101 {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n".format(self.server.response_msg)
-        elif self.server.response_code == '200':
-            resp = "HTTP/1.1 200 {}\r\n\r\n".format(self.server.response_msg)
         else:
-            resp = "HTTP/1.1 101 {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n".format(self.server.response_msg)
+            resp = "HTTP/1.1 200 {}\r\n\r\n".format(self.server.response_msg)
 
         self.client.sendall(resp.encode())
         self.server.print_log(self.log)
