@@ -539,8 +539,14 @@ router.post('/config-templates/:id/toggle-active', (req, res) => {
     const newActive = (tmpl.is_active === 1) ? 0 : 1;
     db.prepare('UPDATE config_templates SET is_active = ? WHERE id = ?').run(newActive, tmpl.id);
     audit.log('admin', req.session.username, 'toggle_template_active', `Statut serveur #${tmpl.id} : ${newActive === 1 ? 'Actif' : 'Inactif'}`, tmpl.id);
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success', is_active: newActive });
+    }
     res.redirect('/admin/access-codes?success=' + encodeURIComponent(`Serveur ${newActive === 1 ? 'Activé' : 'Désactivé'}.`));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
@@ -549,8 +555,14 @@ router.post('/config-templates/:id/reset-quota', (req, res) => {
   try {
     db.prepare('UPDATE config_templates SET consumed_data_gb = 0, is_active = 1 WHERE id = ?').run(req.params.id);
     audit.log('admin', req.session.username, 'reset_template_quota', `Quota cumulé du serveur #${req.params.id} réinitialisé à 0 Go (Statut Réactivé)`, req.params.id);
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success', consumed_data_gb: 0 });
+    }
     res.redirect('/admin/access-codes?success=' + encodeURIComponent('Consommation cumulée du serveur réinitialisée à 0 Go (Serveur Réactivé).'));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
@@ -559,31 +571,38 @@ router.post('/config-templates/:id/reorder', (req, res) => {
   try {
     const { id } = req.params;
     const { direction } = req.body;
-    const current = db.prepare('SELECT id, sort_order FROM config_templates WHERE id = ?').get(id);
-    if (!current) return res.redirect('/admin/access-codes');
 
-    const currentOrder = current.sort_order || 0;
+    const all = db.prepare('SELECT id, sort_order FROM config_templates ORDER BY sort_order ASC, id DESC').all();
 
-    if (direction === 'up') {
-      const prev = db.prepare('SELECT id, sort_order FROM config_templates WHERE (sort_order < ? OR (sort_order = ? AND id > ?)) AND id != ? ORDER BY sort_order DESC, id DESC LIMIT 1').get(currentOrder, currentOrder, current.id, current.id);
-      if (prev) {
-        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(prev.sort_order, current.id);
-        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder, prev.id);
-      } else {
-        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder - 1, current.id);
+    all.forEach((item, index) => {
+      const normalizedOrder = (index + 1) * 10;
+      if (item.sort_order !== normalizedOrder) {
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(normalizedOrder, item.id);
+        item.sort_order = normalizedOrder;
       }
-    } else if (direction === 'down') {
-      const next = db.prepare('SELECT id, sort_order FROM config_templates WHERE (sort_order > ? OR (sort_order = ? AND id < ?)) AND id != ? ORDER BY sort_order ASC, id ASC LIMIT 1').get(currentOrder, currentOrder, current.id, current.id);
-      if (next) {
-        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(next.sort_order, current.id);
-        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder, next.id);
-      } else {
-        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(currentOrder + 1, current.id);
+    });
+
+    const currentIndex = all.findIndex(item => item.id === parseInt(id, 10));
+    if (currentIndex !== -1) {
+      if (direction === 'up' && currentIndex > 0) {
+        const prevItem = all[currentIndex - 1];
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(prevItem.sort_order, all[currentIndex].id);
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(all[currentIndex].sort_order, prevItem.id);
+      } else if (direction === 'down' && currentIndex < all.length - 1) {
+        const nextItem = all[currentIndex + 1];
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(nextItem.sort_order, all[currentIndex].id);
+        db.prepare('UPDATE config_templates SET sort_order = ? WHERE id = ?').run(all[currentIndex].sort_order, nextItem.id);
       }
     }
-    audit.log('admin', req.session.username, 'reorder_template', `Ordre de tri modifié pour le serveur #${id}`, id);
-    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Ordre d\'affichage du serveur mis à jour.'));
+
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success' });
+    }
+    res.redirect('/admin/access-codes?success=' + encodeURIComponent('Ordre d\'affichage mis à jour.'));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/admin/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
@@ -711,8 +730,14 @@ router.post('/access-codes/:id/reset-usage', (req, res) => {
     db.prepare("UPDATE access_codes SET consumed_data_gb = 0, status = 'active' WHERE id = ?").run(codeId);
     db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ?").run(codeId);
     audit.log('admin', req.session.username, 'reset_code_usage', `Consommation globale remise à 0 Go pour la clé #${codeId}`, null);
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success' });
+    }
     res.redirect('/admin/premium-codes?success=' + encodeURIComponent('Consommation de la clé d\'accès réinitialisée à 0 Go (Statut Réactivé).'));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
@@ -724,8 +749,14 @@ router.post('/access-codes/:id/reset-server-usage', (req, res) => {
     if (template_id) {
       db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ? AND config_template_id = ?").run(codeId, template_id);
     }
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success' });
+    }
     res.redirect('/admin/premium-codes?success=' + encodeURIComponent('Consommation du serveur réinitialisée à 0 Go pour cette clé.'));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });
@@ -739,8 +770,14 @@ router.post('/access-codes/:id/delete', (req, res) => {
     }
     db.prepare('DELETE FROM access_codes WHERE id = ?').run(req.params.id);
     audit.log('admin', req.session.username, 'delete_access_code', `Code Premium ${codeRow ? codeRow.code : req.params.id} supprimé (historique de conso conservé)`, null);
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success' });
+    }
     res.redirect('/admin/premium-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/admin/premium-codes?error=' + encodeURIComponent(e.message));
   }
 });

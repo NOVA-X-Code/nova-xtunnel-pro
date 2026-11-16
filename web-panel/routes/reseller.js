@@ -339,8 +339,14 @@ router.post('/access-codes/:id/reset-usage', (req, res) => {
     db.prepare("UPDATE access_codes SET consumed_data_gb = 0, status = 'active' WHERE id = ?").run(codeId);
     db.prepare("UPDATE code_credentials SET consumed_data_gb = 0 WHERE access_code_id = ?").run(codeId);
     audit.log('reseller', req.session.username, 'reset_code_usage', `Consommation globale remise à 0 Go pour la clé #${codeId}`, reseller.id);
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success' });
+    }
     res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Consommation de la clé d\'accès réinitialisée à 0 Go (Statut Réactivé).'));
   } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }
 });
@@ -357,7 +363,17 @@ router.post('/access-codes/:id/delete', (req, res) => {
     }
     db.prepare('DELETE FROM access_codes WHERE id = ? AND reseller_id = ?').run(req.params.id, reseller.id);
     audit.log('reseller', req.session.username, 'delete_access_code', `Code Premium ${codeRow ? codeRow.code : req.params.id} supprimé (historique de conso conservé)`, reseller.id);
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'success' });
+    }
     res.redirect('/reseller/access-codes?success=' + encodeURIComponent('Code d\'accès supprimé.'));
+  } catch (e) {
+    if (req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1)) {
+      return res.json({ status: 'error', message: e.message });
+    }
+    res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
+  }
+});
   } catch (e) {
     res.redirect('/reseller/access-codes?error=' + encodeURIComponent(e.message));
   }

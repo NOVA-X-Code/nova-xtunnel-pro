@@ -199,11 +199,11 @@
                   </td>
                   <td style="padding:14px 10px; text-align:right; white-space:nowrap;">
                     <button class="btn-ghost small" style="color:#A855F7; margin-right:4px;" title="Détails & Consommation par Serveur" onclick='openInfoCodeModal(<%- JSON.stringify(c) %>)'>ℹ️ Info</button>
-                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/reset-usage" style="display:inline;" onsubmit="return confirm('Réinitialiser la data consommée de ce code (<%= c.code %>) à 0 Go ?');">
-                      <button class="btn-ghost small" style="color:#F59E0B; margin-right:4px;" title="Réinitialiser la Data">🔄 Reset</button>
+                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/reset-usage" style="display:inline;" onsubmit="ajaxResetCodeUsage(event, this)">
+                      <button class="btn-ghost small" style="color:#F59E0B; margin-right:4px;" type="submit" title="Réinitialiser la Data">🔄 Reset</button>
                     </form>
                     <button class="btn-ghost small" style="color:#38BDF8; margin-right:4px;" onclick='openEditCodeModal(<%- JSON.stringify(c) %>)'>✏️ Éditer</button>
-                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce code d\'accès ?');">
+                    <form method="POST" action="/reseller/access-codes/<%= c.id %>/delete" style="display:inline;" onsubmit="ajaxDeleteCode(event, this, <%= c.id %>)">
                       <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
                     </form>
                   </td>
@@ -457,6 +457,46 @@
       }
 
       openModal('modalInfoCode');
+    }
+
+    function ajaxResetCodeUsage(e, form) {
+      e.preventDefault();
+      if (!confirm('Réinitialiser la consommation de ce code à 0 Go ?')) return;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      }).then(function(r) { return r.json(); }).then(function(res) {
+        if (res && res.status === 'success') {
+          var toast = document.getElementById('toastMsg');
+          toast.innerText = '🔄 Consommation réinitialisée à 0 Go !';
+          toast.style.display = 'block';
+          setTimeout(function() { toast.style.display = 'none'; }, 2500);
+          pollResellerData();
+        } else {
+          window.location.reload();
+        }
+      }).catch(function() { window.location.reload(); });
+    }
+
+    function ajaxDeleteCode(e, form, id) {
+      e.preventDefault();
+      if (!confirm('Supprimer ce code d\'accès ?')) return;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      }).then(function(r) { return r.json(); }).then(function(res) {
+        if (res && res.status === 'success') {
+          var row = document.getElementById('reseller_row_code_' + id);
+          if (row) row.remove();
+          var toast = document.getElementById('toastMsg');
+          toast.innerText = '🗑️ Code supprimé !';
+          toast.style.display = 'block';
+          setTimeout(function() { toast.style.display = 'none'; }, 2500);
+          pollResellerData();
+        } else {
+          window.location.reload();
+        }
+      }).catch(function() { window.location.reload(); });
     }
 
     function openEditCodeModal(c) {
