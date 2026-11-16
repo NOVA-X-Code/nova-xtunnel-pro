@@ -3261,15 +3261,15 @@ frontend port_80_edge
     tcp-request inspect-delay 2s
 
     acl is_ssh payload(0,7) -m bin 5353482d322e30
-    acl is_ws_verb payload(0,4) -m sub GET HEAD OPTI PATC
+    acl is_ws payload(0,16384) -m sub -i websocket
     acl is_payload payload(0,4) -m sub GET POST HEAD OPTI PUT DELE TRAC CONN PATC HTTP
 
-    tcp-request content accept if is_ws_verb
+    tcp-request content accept if is_ws
     tcp-request content accept if is_payload
     tcp-request content accept if is_ssh
     tcp-request content accept if HTTP
 
-    use_backend direct_ssht if is_ws_verb
+    use_backend direct_ssht if is_ws
     use_backend direct_sshp if is_payload
     default_backend nginx_cleartext
 
@@ -3648,7 +3648,7 @@ class ConnectionHandler(threading.Thread):
             if real_ip:
                 self.log += ' (Real IP: ' + real_ip.split(',')[0].strip() + ')'
 
-            # 1. Check X-Real-Host
+            # 1. Check X-Real-Host (explicit SSH target header)
             host_port = self.find_header(client_buffer, b'X-Real-Host')
 
             # 2. Check CONNECT line (e.g. CONNECT 127.0.0.1:22 HTTP/1.1)
@@ -3656,18 +3656,14 @@ class ConnectionHandler(threading.Thread):
                 first_line = client_buffer.split(b'\r\n')[0].decode(errors='ignore')
                 if first_line.startswith('CONNECT '):
                     parts = first_line.split(' ')
-                    if len(parts) >= 2:
-                        host_port = parts[1]
+                    if len(parts) >= 2 and ':' in parts[1]:
+                        target = parts[1]
+                        if '127.0.0.1' in target or 'localhost' in target or '0.0.0.0' in target:
+                            host_port = target
 
-            # 3. Check Host: headers
+            # 3. Fallback to default_host (127.0.0.1:22)
             if not host_port:
-                hosts = self.find_all_headers(client_buffer, b'Host')
-                for h in reversed(hosts):
-                    if h and not h.lower().startswith('auth.') and not h.lower().startswith('foxnews'):
-                        host_port = h
-                        break
-
-            # 4. Fallback to default_host
+                host_port = self.server.default_host
             if not host_port:
                 host_port = self.server.default_host
 
