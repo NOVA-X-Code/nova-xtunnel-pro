@@ -410,20 +410,6 @@
           </table>
         </div>
       <% } %>
-                    <form method="POST" action="/admin/config-templates/<%= t.id %>/reset-quota" style="display:inline;" onsubmit="return confirm('Réinitialiser la consommation cumulée de ce serveur à 0 Go ?');">
-                      <button class="btn-ghost small" style="color:#F59E0B; margin-right:6px;" type="submit" title="Réinitialiser Quota">🔄 Quota</button>
-                    </form>
-                    <button class="btn-ghost small" style="color:#38BDF8; margin-right:6px;" onclick='openEditTemplateModal(<%- JSON.stringify(t) %>)'>✏️ Éditer</button>
-                    <form method="POST" action="/admin/config-templates/<%= t.id %>/delete" style="display:inline;" onsubmit="return confirm('Supprimer ce mode de configuration ?');">
-                      <button class="btn-ghost small" style="color:#EF4444;" type="submit">Supprimer</button>
-                    </form>
-                  </td>
-                </tr>
-              <% }); %>
-            </tbody>
-          </table>
-        </div>
-      <% } %>
     </div>
   </div>
 
