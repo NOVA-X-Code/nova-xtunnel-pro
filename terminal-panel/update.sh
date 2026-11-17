@@ -12,6 +12,12 @@ echo "Mise à jour de NOVA X Tunnel (panel terminal)..."
 cp "$SCRIPT_DIR/menu.sh" /usr/local/bin/menu
 chmod +x /usr/local/bin/menu
 
+# Update default SSH banner if missing or requested
+if [ -f "$SCRIPT_DIR/bannerssh" ] && [ ! -f /etc/bannerssh ]; then
+    cp "$SCRIPT_DIR/bannerssh" /etc/bannerssh
+    chmod 644 /etc/bannerssh
+fi
+
 # Safely update HAProxy config if HAProxy is active, leaving Nginx completely untouched
 if command -v haproxy &>/dev/null && systemctl is-active --quiet haproxy 2>/dev/null; then
     echo "🔄 Actualisation de la configuration HAProxy (Nginx inchangé)..."

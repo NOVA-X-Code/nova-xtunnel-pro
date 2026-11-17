@@ -289,12 +289,13 @@ router.post('/config-templates', (req, res) => {
     const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
     const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
     const isAdminOnlyVal = (req.body.is_admin_only === '1' || req.body.is_admin_only === 'on') ? 1 : 0;
+    const isActiveVal = (req.body.is_active === '1' || req.body.is_active === 'on') ? 1 : 0;
 
     const resultInfo = db.prepare(`
       INSERT INTO config_templates (
         name, info, flag, protocol, server_ip, server_port, proxy_ip, proxy_port, payload, sni, v2ray_link, public_key, nameserver, dns_server, xray_inbound_id, path, default_user, default_pass,
-        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb, is_auto_generated, is_admin_only
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_base_config, is_customizable, is_quota_counted, is_global_premium, max_data_gb, is_auto_generated, is_admin_only, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name,
       info || '',
@@ -320,7 +321,8 @@ router.post('/config-templates', (req, res) => {
       is_global_premium,
       parseFloat(max_data_gb) || 0,
       isAutoGenVal,
-      isAdminOnlyVal
+      isAdminOnlyVal,
+      isActiveVal
     );
 
     const insertedId = resultInfo.lastInsertRowid;

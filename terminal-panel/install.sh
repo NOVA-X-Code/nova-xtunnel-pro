@@ -27,6 +27,12 @@ cp "$SSHD_CONFIG" "$BACKUP"
 cp "$SCRIPT_DIR/ssh" "$SSHD_CONFIG"
 chmod 600 "$SSHD_CONFIG"
 
+# Install default SSH banner
+if [ -f "$SCRIPT_DIR/bannerssh" ]; then
+    cp "$SCRIPT_DIR/bannerssh" /etc/bannerssh
+    chmod 644 /etc/bannerssh
+fi
+
 # Validate SSH config (silent)
 if ! sshd -t 2>/dev/null; then
     echo "ERROR: SSH configuration is invalid!"

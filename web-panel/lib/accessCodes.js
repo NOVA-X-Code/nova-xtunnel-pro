@@ -143,9 +143,10 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
     }
   }
 
+  let isCodeDepleted = false;
   if (accessCode.max_data_gb > 0 && accessCode.consumed_data_gb >= accessCode.max_data_gb) {
     db.prepare("UPDATE access_codes SET status = 'depleted' WHERE id = ?").run(accessCode.id);
-    throw new Error("Access Code Data Limit Reached.");
+    isCodeDepleted = true;
   }
 
   // Bind HWID if not bound yet (case-insensitive & trimmed)
@@ -180,6 +181,10 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
     // If template is inactive/disabled or client reached server data limit, omit this server!
     if (c.is_active === 0) continue;
     if (c.template_max_data_gb > 0 && (c.consumed_data_gb || 0) >= c.template_max_data_gb) {
+      continue;
+    }
+    // If code quota is depleted, filter out all quota-counted servers (they disappear from the list!)
+    if (isCodeDepleted && c.is_quota_counted !== 0) {
       continue;
     }
 
