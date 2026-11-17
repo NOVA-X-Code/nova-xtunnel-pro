@@ -1,61 +1,59 @@
-<div style="max-width:480px; margin:auto; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:linear-gradient(135deg, #0d0b1e 0%, #181236 100%); color:#ffffff; padding:18px; border-radius:16px; border:1px solid #7c3aed; box-shadow:0 8px 32px rgba(124,58,237,0.25); box-sizing:border-box;">
+<div align="center" style="max-width:480px; margin:0 auto; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:#0d0b1e; color:#ffffff; padding:16px; border-radius:16px; border:2px solid #7c3aed; text-align:center;">
+  <center>
 
-  <!-- En-tête -->
-  <div style="text-align:center; padding-bottom:12px; border-bottom:1px solid rgba(168,85,247,0.25);">
-    <h2 style="margin:0; color:#c084fc; font-size:18px; font-weight:700; letter-spacing:0.5px;">
-      🌍 VPS 🖥 • UNLIMITED NETWORK 🚀📡
-    </h2>
-    <p style="margin:4px 0 0; color:#e9d5ff; font-size:13px;">
-      <strong style="color:#a855f7;">LaboKingFreeSurf</strong> – Digital & Cloud Solutions 🌐
-    </p>
-    <p style="margin:6px 0 0; color:#cbd5e1; font-size:11.5px; line-height:1.4;">
-      Serveurs VPS haute performance, accès VPN sécurisé & services digitaux.
-    </p>
-  </div>
-
-  <!-- Services Grid -->
-  <div style="margin:12px 0; background:rgba(124,58,237,0.1); border:1px solid rgba(168,85,247,0.3); border-radius:12px; padding:12px;">
-    <div style="color:#a855f7; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; text-align:center;">
-      🖥 OUR SERVICES
+    <!-- En-tête -->
+    <div align="center" style="text-align:center; padding-bottom:10px; border-bottom:1px solid #a855f7;">
+      <h2 style="margin:0 0 4px 0; color:#c084fc; font-size:18px; font-weight:bold;">
+        🌍 VPS 🖥 • UNLIMITED NETWORK 🚀📡
+      </h2>
+      <p style="margin:2px 0; color:#e9d5ff; font-size:13px;">
+        <font color="#a855f7"><b>LaboKingFreeSurf</b></font> – Digital & Cloud Solutions 🌐
+      </p>
+      <p style="margin:4px 0 0 0; color:#cbd5e1; font-size:11.5px;">
+        Serveurs VPS haute performance, accès VPN sécurisé & services digitaux.
+      </p>
     </div>
-    <ul style="list-style:none; padding:0; margin:0; display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; font-size:11px; color:#ede9fe;">
-      <li>🚀 High-Perf VPS (Linux)</li>
-      <li>💾 RAM: 1GB • 2GB • 4GB • 8GB</li>
-      <li>⏳ 30 Days / 6 Months / 1 Year</li>
-      <li>☁️ Cloud: AWS • GCP (Soon)</li>
-      <li>🔐 Premium VPN Config Files</li>
-      <li>📡 Unlimited Net (WebSocket, Proxy)</li>
-      <li>⚙️ Xray / V2Ray / SSH Setup</li>
-      <li>🌐 Website Dev & Hosting</li>
-      <li style="grid-column: span 2;">🤖 Telegram & WhatsApp Bot Dev</li>
-    </ul>
-  </div>
 
-  <!-- Badges Garantie -->
-  <div style="display:flex; justify-content:center; gap:6px; margin-bottom:12px; text-align:center; flex-wrap:wrap;">
-    <span style="background:rgba(168,85,247,0.15); border:1px solid #a855f7; border-radius:20px; padding:3px 8px; font-size:10.5px; color:#faf5ff;">
-      🛡️ <strong>GUARANTEE :</strong>
-    </span>
-    <span style="background:rgba(34,197,94,0.15); border:1px solid #22c55e; border-radius:20px; padding:3px 8px; font-size:10.5px; color:#4ade80;">✔️ Satisfied</span>
-    <span style="background:rgba(59,130,246,0.15); border:1px solid #3b82f6; border-radius:20px; padding:3px 8px; font-size:10.5px; color:#60a5fa;">✔️ Replaced</span>
-    <span style="background:rgba(244,63,94,0.15); border:1px solid #f43f5e; border-radius:20px; padding:3px 8px; font-size:10.5px; color:#fb7185;">✔️ Refunded</span>
-  </div>
-
-  <!-- Boutons Canaux Officiels -->
-  <div style="text-align:center; padding-top:10px; border-top:1px solid rgba(168,85,247,0.25);">
-    <div style="color:#c084fc; font-size:11.5px; font-weight:700; margin-bottom:8px;">📞 OFFICIAL CHANNELS</div>
-    <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:6px;">
-      <a href="https://t.me/addlist/CpQzYQfWwwxmYTk0" target="_blank" style="background:#24A1DE; color:#ffffff; text-decoration:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; display:inline-block;">📂 Telegram AddList</a>
-      <a href="https://whatsapp.com/channel/0029Vb8ZJnsAYlUHo1uA6W0y" target="_blank" style="background:#25D366; color:#ffffff; text-decoration:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; display:inline-block;">💬 WhatsApp 1</a>
-      <a href="https://whatsapp.com/channel/0029Vb6yLAG9WtC0zbXeEo2t" target="_blank" style="background:#25D366; color:#ffffff; text-decoration:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; display:inline-block;">💬 WhatsApp 2</a>
-      <a href="https://youtube.com/@labokingfreesurf?si=XfpF_ioL6JQv8rqr" target="_blank" style="background:#FF0000; color:#ffffff; text-decoration:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; display:inline-block;">▶️ YouTube</a>
-      <a href="https://discord.gg/xGAGs69UHj" target="_blank" style="background:#5865F2; color:#ffffff; text-decoration:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; display:inline-block;">🎮 Discord</a>
-      <a href="https://www.facebook.com/profile.php?id=61595438823449" target="_blank" style="background:#1877F2; color:#ffffff; text-decoration:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:600; display:inline-block;">📘 Facebook</a>
+    <!-- Services -->
+    <div align="center" style="text-align:center; margin:10px 0; background:#181236; border:1px solid #7c3aed; border-radius:12px; padding:10px; font-size:11.5px; color:#ede9fe; line-height:1.6;">
+      <div style="color:#a855f7; font-size:12px; font-weight:bold; margin-bottom:6px;">
+        <font color="#a855f7"><b>🖥 OUR SERVICES</b></font>
+      </div>
+      🚀 High-Perf VPS (Linux) &nbsp;•&nbsp; 💾 RAM: 1GB to 8GB<br>
+      ⏳ 30 Days / 6 Months / 1 Year &nbsp;•&nbsp; ☁️ Cloud: AWS / GCP<br>
+      🔐 Premium VPN Config Files &nbsp;•&nbsp; 📡 Unlimited Net (WS/Proxy)<br>
+      ⚙️ Xray / V2Ray / SSH Setup &nbsp;•&nbsp; 🌐 Website Dev & Hosting<br>
+      🤖 Telegram & WhatsApp Bot Dev
     </div>
-  </div>
 
-  <!-- Pied de page -->
-  <div style="margin-top:12px; text-align:center; color:#94a3b8; font-size:10.5px; font-weight:600; letter-spacing:0.5px;">
-    🔥 QUALITY • SECURITY • PERFORMANCE 🔥
-  </div>
+    <!-- Badges Garantie -->
+    <div align="center" style="text-align:center; margin-bottom:10px; font-size:11px;">
+      <font color="#c084fc"><b>🛡️ GUARANTEE :</b></font>&nbsp;
+      <font color="#4ade80"><b>[ ✔️ Satisfied ]</b></font>&nbsp;
+      <font color="#60a5fa"><b>[ ✔️ Replaced ]</b></font>&nbsp;
+      <font color="#fb7185"><b>[ ✔️ Refunded ]</b></font>
+    </div>
+
+    <!-- Canaux Officiels / Boutons Cliquables -->
+    <div align="center" style="text-align:center; padding-top:10px; border-top:1px solid #a855f7;">
+      <div style="color:#c084fc; font-size:12px; font-weight:bold; margin-bottom:8px;">
+        <font color="#c084fc"><b>📞 OFFICIAL CHANNELS</b></font>
+      </div>
+      <p align="center" style="margin:0; text-align:center; line-height:2.2;">
+        <a href="https://t.me/addlist/CpQzYQfWwwxmYTk0" target="_blank" style="display:inline-block; background:#24A1DE; color:#ffffff; text-decoration:none; padding:6px 12px; margin:3px; border-radius:8px; font-size:11px; font-weight:bold;"><font color="#ffffff"><b>📂 Telegram AddList</b></font></a>
+        <a href="https://whatsapp.com/channel/0029Vb8ZJnsAYlUHo1uA6W0y" target="_blank" style="display:inline-block; background:#25D366; color:#ffffff; text-decoration:none; padding:6px 12px; margin:3px; border-radius:8px; font-size:11px; font-weight:bold;"><font color="#ffffff"><b>💬 WhatsApp 1</b></font></a>
+        <a href="https://whatsapp.com/channel/0029Vb6yLAG9WtC0zbXeEo2t" target="_blank" style="display:inline-block; background:#25D366; color:#ffffff; text-decoration:none; padding:6px 12px; margin:3px; border-radius:8px; font-size:11px; font-weight:bold;"><font color="#ffffff"><b>💬 WhatsApp 2</b></font></a>
+        <br>
+        <a href="https://youtube.com/@labokingfreesurf?si=XfpF_ioL6JQv8rqr" target="_blank" style="display:inline-block; background:#FF0000; color:#ffffff; text-decoration:none; padding:6px 12px; margin:3px; border-radius:8px; font-size:11px; font-weight:bold;"><font color="#ffffff"><b>▶️ YouTube</b></font></a>
+        <a href="https://discord.gg/xGAGs69UHj" target="_blank" style="display:inline-block; background:#5865F2; color:#ffffff; text-decoration:none; padding:6px 12px; margin:3px; border-radius:8px; font-size:11px; font-weight:bold;"><font color="#ffffff"><b>🎮 Discord</b></font></a>
+        <a href="https://www.facebook.com/profile.php?id=61595438823449" target="_blank" style="display:inline-block; background:#1877F2; color:#ffffff; text-decoration:none; padding:6px 12px; margin:3px; border-radius:8px; font-size:11px; font-weight:bold;"><font color="#ffffff"><b>📘 Facebook</b></font></a>
+      </p>
+    </div>
+
+    <!-- Pied de page -->
+    <div align="center" style="margin-top:10px; text-align:center; color:#94a3b8; font-size:10.5px; font-weight:bold;">
+      🔥 QUALITY • SECURITY • PERFORMANCE 🔥
+    </div>
+
+  </center>
 </div>
