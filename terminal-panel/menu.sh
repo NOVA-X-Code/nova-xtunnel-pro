@@ -3437,6 +3437,39 @@ update_haproxy_only() {
     fi
 }
 
+restore_firewall() {
+    _ff_rebuild_udp_dnat_rules 2>/dev/null || true
+    sysctl -w net.ipv4.conf.all.route_localnet=1 >/dev/null 2>&1 || true
+    local ip_vps
+    ip_vps=$(curl -s -4 icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')
+    if [[ -n "$ip_vps" ]]; then
+        iptables -t nat -D PREROUTING -p tcp -d "$ip_vps" --dport 2045 -j REDIRECT --to-ports 2045 2>/dev/null || true
+        iptables -t nat -A PREROUTING -p tcp -d "$ip_vps" --dport 2045 -j REDIRECT --to-ports 2045 2>/dev/null || true
+        iptables -t nat -D PREROUTING -p tcp -d "$ip_vps" --dport 22 -j REDIRECT --to-ports 22 2>/dev/null || true
+        iptables -t nat -A PREROUTING -p tcp -d "$ip_vps" --dport 22 -j REDIRECT --to-ports 22 2>/dev/null || true
+    fi
+    iptables -A INPUT -i zivpn+ -j ACCEPT 2>/dev/null || true
+    iptables -A INPUT -i tun+ -j ACCEPT 2>/dev/null || true
+}
+
+ensure_firewall_boot_service() {
+    cat > /etc/systemd/system/novaxtunnel-firewall.service <<EOF
+[Unit]
+Description=NOVA XTUNNEL Boot Firewall Restorer
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/menu --exec restore_firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable novaxtunnel-firewall.service 2>/dev/null || true
+}
+
 install_ssl_tunnel() {
     clear; show_banner
     echo -e "${C_BOLD}${C_PURPLE}--- 🚀 Installing HAProxy Edge Stack (80/443 -> 8880/8443) ---${C_RESET}"
@@ -3862,6 +3895,7 @@ Type=simple
 ExecStart=/usr/bin/python3 $PYPROXY_SCRIPT -p $socks_port --response-code 200 --response-msg @Labokingfreesurf --default-host 127.0.0.1:22
 Restart=always
 RestartSec=2s
+LimitNOFILE=65535
 
 [Install]
 WantedBy=default.target
@@ -3878,6 +3912,7 @@ Type=simple
 ExecStart=/usr/bin/python3 $PYPROXY_SCRIPT -p $ws_port --response-code 101 --response-msg @Labokingfreesurf --default-host 127.0.0.1:22
 Restart=always
 RestartSec=2s
+LimitNOFILE=65535
 
 [Install]
 WantedBy=default.target
@@ -4548,6 +4583,7 @@ EOF
     fi
 
     echo -e "\n${C_GREEN}🚀 Starting DNSTT Service...${C_RESET}"
+    ensure_firewall_boot_service
     systemctl daemon-reload
     systemctl enable dnstt.service >/dev/null 2>&1
     systemctl restart dnstt.service
@@ -6563,7 +6599,7 @@ if [[ "$1" == "--exec" ]]; then
         install_slowudp|uninstall_slowudp|\
         install_slowdns|uninstall_slowdns|\
         torrent_block_enable|torrent_block_disable|\
-        update_haproxy_only)
+        update_haproxy_only|restore_firewall)
             "$action" </dev/null
             exit $?
             ;;

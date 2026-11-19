@@ -287,7 +287,7 @@ router.post('/config-templates', (req, res) => {
     }
 
     const isCustomizableVal = (req.body.is_customizable === '1' || req.body.is_customizable === 'on') ? 1 : 0;
-    const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on' || req.body.is_auto_generated === undefined) ? 1 : 0;
+    const isAutoGenVal = (req.body.is_auto_generated === '1' || req.body.is_auto_generated === 'on') ? 1 : 0;
     const isAdminOnlyVal = (req.body.is_admin_only === '1' || req.body.is_admin_only === 'on') ? 1 : 0;
     const isActiveVal = (req.body.is_active === '1' || req.body.is_active === 'on') ? 1 : 0;
 

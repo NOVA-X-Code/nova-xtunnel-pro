@@ -150,7 +150,7 @@
       <% if (accessCodes.length === 0) { %>
         <div style="text-align:center; padding:32px; background:var(--bg); border-radius:12px; border:1px dashed var(--border);">
           <p style="color:var(--text-muted); font-size:14px; margin:0 0 16px 0;">Vous n'avez pas encore généré de clé d'accès Premium.</p>
-          <button class="btn-primary" style="background:#22C55E; border:none;" onclick="openModal('modalCreateCode')">+ Générer votre première clé</button>
+          <button class="btn-glow btn-glow-success" onclick="openModal('modalCreateCode')">+ Générer votre première clé</button>
         </div>
       <% } else { %>
         <div style="overflow-x:auto;">
@@ -275,7 +275,7 @@
 
         <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:24px;">
           <button type="button" class="btn-ghost" onclick="closeModal('modalCreateCode')">Annuler</button>
-          <button type="submit" class="btn-primary" style="background:#22C55E; border:none;">Générer la Clé</button>
+          <button type="submit" class="btn-glow btn-glow-success">Générer la Clé</button>
         </div>
       </form>
     </div>
@@ -351,7 +351,7 @@
           <button type="button" class="btn-ghost small" style="color:#F59E0B;" onclick="if(confirm('Remettre la consommation de ce code à 0 Go et le réactiver ?')) document.getElementById('resellerFormResetCodeUsage').submit();">🔄 Remettre Conso à 0 Go</button>
           <div style="display:flex; gap:12px;">
             <button type="button" class="btn-ghost" onclick="closeModal('modalEditCode')">Annuler</button>
-            <button type="submit" class="btn-primary" style="background:#22C55E; border:none;">Enregistrer les Modifications</button>
+            <button type="submit" class="btn-glow btn-glow-success">Enregistrer les Modifications</button>
           </div>
         </div>
       </form>
