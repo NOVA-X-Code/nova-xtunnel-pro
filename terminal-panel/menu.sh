@@ -609,8 +609,12 @@ _ff_rebuild_udp_dnat_rules() {
     fi
 
     if [ -f "$DNSTT_SERVICE_FILE" ]; then
-        iptables -t nat -D PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
-        iptables -t nat -A PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT"
+        if [ -n "$iface" ]; then
+            iptables -t nat -D PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
+            iptables -t nat -A PREROUTING -i "$iface" -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
+        fi
+        iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
+        iptables -t nat -A PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_LISTEN_PORT" 2>/dev/null || true
     fi
 
     (( ${#all_segments[@]} == 0 )) && return
@@ -646,12 +650,11 @@ check_and_open_firewall_udp_range() {
     local iface
     iface=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
     if [ -n "$iface" ]; then
-        # Remove any previous rule redirecting this exact range (idempotent re-install/update)
-        iptables -t nat -D PREROUTING -i "$iface" -p udp --dport "${range_start}:${range_end}" -j DNAT --to-destination ":${internal_port}" 2>/dev/null
-        iptables -t nat -A PREROUTING -i "$iface" -p udp --dport "${range_start}:${range_end}" -j DNAT --to-destination ":${internal_port}"
-    else
-        echo -e "${C_YELLOW}⚠️ Could not detect default interface for IPTables redirection (${range_start}:${range_end} -> ${internal_port}).${C_RESET}"
+        iptables -t nat -D PREROUTING -i "$iface" -p udp --dport "${range_start}:${range_end}" -j DNAT --to-destination ":${internal_port}" 2>/dev/null || true
+        iptables -t nat -A PREROUTING -i "$iface" -p udp --dport "${range_start}:${range_end}" -j DNAT --to-destination ":${internal_port}" 2>/dev/null || true
     fi
+    iptables -t nat -D PREROUTING -p udp --dport "${range_start}:${range_end}" -j DNAT --to-destination ":${internal_port}" 2>/dev/null || true
+    iptables -t nat -A PREROUTING -p udp --dport "${range_start}:${range_end}" -j DNAT --to-destination ":${internal_port}" 2>/dev/null || true
 }
 
 # Two inclusive integer ranges [a1,a2] and [b1,b2] overlap if a1<=b2 AND b1<=a2.
@@ -3438,8 +3441,20 @@ update_haproxy_only() {
 }
 
 restore_firewall() {
+    local attempts=0
+    local iface=""
+    while [ $attempts -lt 10 ]; do
+        iface=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+        [[ -n "$iface" ]] && break
+        sleep 1
+        ((attempts++))
+    done
+
     _ff_rebuild_udp_dnat_rules 2>/dev/null || true
     sysctl -w net.ipv4.conf.all.route_localnet=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf.all.rp_filter=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.conf.default.rp_filter=0 >/dev/null 2>&1 || true
+
     local ip_vps
     ip_vps=$(curl -s -4 icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')
     if [[ -n "$ip_vps" ]]; then
@@ -3456,7 +3471,8 @@ ensure_firewall_boot_service() {
     cat > /etc/systemd/system/novaxtunnel-firewall.service <<EOF
 [Unit]
 Description=NOVA XTUNNEL Boot Firewall Restorer
-After=network.target
+After=network.target network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -3468,6 +3484,7 @@ WantedBy=multi-user.target
 EOF
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable novaxtunnel-firewall.service 2>/dev/null || true
+    systemctl start novaxtunnel-firewall.service 2>/dev/null || true
 }
 
 install_ssl_tunnel() {

@@ -24,6 +24,9 @@ if command -v haproxy &>/dev/null && systemctl is-active --quiet haproxy 2>/dev/
     /usr/local/bin/menu --exec update_haproxy_only || true
 fi
 
+# Ensure Firewall & IPTables boot restorer is active for SlowDNS/UDP/ZiVPN across reboots
+/usr/local/bin/menu --exec restore_firewall || true
+
 # Falcon Proxy has been removed from the panel entirely - clean up any leftover files from
 # a server that was updated before this removal, so nothing unused lingers on disk.
 rm -rf "$SCRIPT_DIR/falconproxy" /opt/nova-x-tunnel/falconproxy /opt/novaxtunnel/falconproxy 2>/dev/null || true
