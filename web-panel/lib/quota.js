@@ -50,6 +50,14 @@ function getResellerStats(reseller) {
     return { ...c, _online: online, usageGb: usageGb };
   });
 
+  // Include data consumed by reseller's Premium Access Codes
+  try {
+    const codesRow = db.prepare('SELECT COALESCE(SUM(consumed_data_gb), 0) AS total FROM access_codes WHERE reseller_id = ?').get(reseller.id);
+    if (codesRow && codesRow.total) {
+      consumedActiveGb += parseFloat(codesRow.total) || 0;
+    }
+  } catch (e) {}
+
   return {
     activeClientCount: active.length,
     onlineClientCount: onlineTotal,

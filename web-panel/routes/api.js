@@ -194,11 +194,6 @@ router.post('/report-usage', verifyAppSignature, (req, res) => {
           db.prepare('UPDATE config_templates SET consumed_data_gb = consumed_data_gb + ? WHERE id = ?').run(usageGb, template_id);
         } catch (e) {}
       }
-
-      // If created by reseller, update reseller's total consumption as well
-      if (codeRow.reseller_id) {
-        db.prepare('UPDATE resellers SET data_quota_gb = MAX(0, data_quota_gb - ?) WHERE id = ? AND data_quota_gb IS NOT NULL').run(usageGb, codeRow.reseller_id);
-      }
     }
 
     // Refresh updated row
