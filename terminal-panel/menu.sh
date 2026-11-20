@@ -3454,6 +3454,11 @@ restore_firewall() {
     sysctl -w net.ipv4.conf.all.route_localnet=1 >/dev/null 2>&1 || true
     sysctl -w net.ipv4.conf.all.rp_filter=0 >/dev/null 2>&1 || true
     sysctl -w net.ipv4.conf.default.rp_filter=0 >/dev/null 2>&1 || true
+    sysctl -w fs.file-max=2097152 >/dev/null 2>&1 || true
+    sysctl -w net.core.somaxconn=65535 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.tcp_max_syn_backlog=65535 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.tcp_tw_reuse=1 >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.tcp_fin_timeout=15 >/dev/null 2>&1 || true
 
     local ip_vps
     ip_vps=$(curl -s -4 icanhazip.com 2>/dev/null || hostname -I | awk '{print $1}')
@@ -3619,7 +3624,7 @@ class Server(threading.Thread):
         self.soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.soc.settimeout(2)
         self.soc.bind((self.host, self.port))
-        self.soc.listen(5)
+        self.soc.listen(4096)
         self.running = True
         try:
             while self.running:
@@ -3801,11 +3806,14 @@ class ConnectionHandler(threading.Thread):
 
     def do_connect(self):
         socs = [self.client, self.target]
-        count = 0
+        for s in socs:
+            try:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            except Exception:
+                pass
         error = False
         while True:
-            count += 1
-            recv, _, err = select.select(socs, [], socs, 3)
+            recv, _, err = select.select(socs, [], socs, 30)
             if err:
                 error = True
             if recv:
@@ -3814,19 +3822,17 @@ class ConnectionHandler(threading.Thread):
                         data = in_.recv(BUFLEN)
                         if data:
                             if in_ is self.target:
-                                self.client.send(data)
+                                self.client.sendall(data)
                             else:
-                                while data:
-                                    sent = self.target.send(data)
-                                    data = data[sent:]
-                            count = 0
+                                self.target.sendall(data)
                         else:
                             error = True
                             break
                     except OSError:
                         error = True
                         break
-            if count >= TIMEOUT or error:
+
+            if error:
                 break
 
 
@@ -3911,8 +3917,11 @@ User=root
 Type=simple
 ExecStart=/usr/bin/python3 $PYPROXY_SCRIPT -p $socks_port --response-code 200 --response-msg @Labokingfreesurf --default-host 127.0.0.1:22
 Restart=always
-RestartSec=2s
-LimitNOFILE=65535
+RestartSec=1s
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitMEMLOCK=infinity
+TasksMax=infinity
 
 [Install]
 WantedBy=default.target
@@ -3928,8 +3937,11 @@ User=root
 Type=simple
 ExecStart=/usr/bin/python3 $PYPROXY_SCRIPT -p $ws_port --response-code 101 --response-msg @Labokingfreesurf --default-host 127.0.0.1:22
 Restart=always
-RestartSec=2s
-LimitNOFILE=65535
+RestartSec=1s
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitMEMLOCK=infinity
+TasksMax=infinity
 
 [Install]
 WantedBy=default.target
