@@ -1286,23 +1286,13 @@
     }
 
     function toggleDefaultCreds() {
-      var radios = document.getElementsByName('access_type');
       var group = document.getElementById('defaultCredsGroup');
-      var selected = 'base';
-      for (var i = 0; i < radios.length; i++) {
-        if (radios[i].checked) selected = radios[i].value;
-      }
-      group.style.display = (selected === 'base') ? 'block' : 'none';
+      if (group) group.style.display = 'block';
     }
 
     function toggleEditDefaultCreds() {
-      var radios = document.getElementsByName('access_type');
       var group = document.getElementById('editDefaultCredsGroup');
-      var selected = 'base';
-      for (var i = 0; i < radios.length; i++) {
-        if (radios[i].checked) selected = radios[i].value;
-      }
-      group.style.display = (selected === 'base') ? 'block' : 'none';
+      if (group) group.style.display = 'block';
     }
 
     function toggleAdvanced3xuiEdit() {

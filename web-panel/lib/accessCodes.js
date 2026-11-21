@@ -113,6 +113,23 @@ function getAccessCodeDetails(codeStr) {
   const codeRow = db.prepare('SELECT * FROM access_codes WHERE UPPER(code) = ?').get(cleanCode);
   if (!codeRow) return null;
 
+  // Auto-attach any missing Global Premium or Base templates to older reseller access codes
+  try {
+    const missingGlobalTemplates = db.prepare(`
+      SELECT ct.* FROM config_templates ct
+      WHERE (ct.is_base_config = 1 OR ct.is_global_premium = 1)
+      AND ct.id NOT IN (SELECT config_template_id FROM code_credentials WHERE access_code_id = ?)
+    `).all(codeRow.id);
+
+    for (const t of missingGlobalTemplates) {
+      const emailTag = `code_${codeRow.code.replace(/-/g, '')}_in${t.xray_inbound_id || 0}`;
+      db.prepare(`
+        INSERT INTO code_credentials (access_code_id, config_template_id, xray_inbound_id, client_uuid_or_user, client_password, client_email_tag, template_max_data_gb)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(codeRow.id, t.id, t.xray_inbound_id || null, t.default_user || 'NOSTRA', t.default_pass || '@LaBoKingFreeSurf', emailTag, t.max_data_gb || 0);
+    }
+  } catch (e) {}
+
   const creds = db.prepare(`
     SELECT cc.*, ct.name, ct.info, ct.flag, ct.protocol, ct.server_ip, ct.server_port, ct.proxy_ip, ct.proxy_port, ct.payload, ct.sni, ct.path, ct.v2ray_link, ct.public_key, ct.nameserver, ct.dns_server, ct.default_user, ct.default_pass, ct.is_auto_generated, ct.is_customizable, ct.is_quota_counted, ct.is_active, ct.sort_order, ct.max_data_gb AS template_max_data_gb
     FROM code_credentials cc
