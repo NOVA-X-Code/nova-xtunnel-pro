@@ -23,12 +23,12 @@ function extractUuidFromV2rayLink(v2rayLink) {
   return match ? match[2] : '';
 }
 
-function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = 30, expiryDate = null, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {}, customUuids = {} }) {
+function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, expiryDays = null, expiryDate = null, maxDevices = 1, selectedTemplateIds = [], templateMaxDataGbs = {}, customUuids = {} }) {
   const code = generateRandomCode();
-  const validDays = parseInt(expiryDays, 10) || 30;
+  const validDays = expiryDays ? parseInt(expiryDays, 10) : null;
 
-  let expiryDateStr = expiryDate || null;
-  if (!expiryDateStr && validDays > 0) {
+  let expiryDateStr = (expiryDate && expiryDate.trim().length > 0) ? expiryDate.trim() : null;
+  if (!expiryDateStr && validDays && validDays > 0) {
     const d = new Date();
     d.setDate(d.getDate() + validDays);
     expiryDateStr = d.toISOString().split('T')[0];
@@ -38,7 +38,7 @@ function createAccessCode({ resellerId, clientReference = '', maxDataGb = 10, ex
   const result = db.prepare(`
     INSERT INTO access_codes (reseller_id, code, client_reference, max_data_gb, max_devices, expiry_days, expiry_date)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(resellerId || null, code, clientReference || '', maxDataGb, maxDevices, validDays, expiryDateStr);
+  `).run(resellerId || null, code, clientReference || '', maxDataGb, maxDevices, validDays || 30, expiryDateStr);
 
   const accessCodeId = result.lastInsertRowid;
 
@@ -130,6 +130,11 @@ function generateEncryptedConfigForCode(codeStr, hwid = '') {
   if (!accessCode) {
     throw new Error("Invalid Access Code: Code not found.");
   }
+
+  // Update last_seen_at timestamp to mark this code active/online
+  try {
+    db.prepare('UPDATE access_codes SET last_seen_at = ? WHERE id = ?').run(Date.now(), accessCode.id);
+  } catch (e) {}
 
   if (accessCode.status !== 'active') {
     throw new Error(`Access Code Inactive: Status is ${accessCode.status}`);

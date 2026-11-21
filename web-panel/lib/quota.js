@@ -50,11 +50,17 @@ function getResellerStats(reseller) {
     return { ...c, _online: online, usageGb: usageGb };
   });
 
-  // Include data consumed by reseller's Premium Access Codes
+  // Include data consumed and live online count from reseller's Premium Access Codes
   try {
     const codesRow = db.prepare('SELECT COALESCE(SUM(consumed_data_gb), 0) AS total FROM access_codes WHERE reseller_id = ?').get(reseller.id);
     if (codesRow && codesRow.total) {
       consumedActiveGb += parseFloat(codesRow.total) || 0;
+    }
+
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    const onlineCodesRow = db.prepare('SELECT COUNT(*) AS total FROM access_codes WHERE reseller_id = ? AND status = "active" AND last_seen_at >= ?').get(reseller.id, fiveMinutesAgo);
+    if (onlineCodesRow && onlineCodesRow.total) {
+      onlineTotal += parseInt(onlineCodesRow.total, 10) || 0;
     }
   } catch (e) {}
 

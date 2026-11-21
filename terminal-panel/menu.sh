@@ -3470,6 +3470,11 @@ restore_firewall() {
     fi
     iptables -A INPUT -i zivpn+ -j ACCEPT 2>/dev/null || true
     iptables -A INPUT -i tun+ -j ACCEPT 2>/dev/null || true
+
+    # Restart UDP daemons after restoring rules to guarantee clean binding
+    [ -f "$DNSTT_SERVICE_FILE" ] && systemctl restart dnstt.service 2>/dev/null || true
+    [ -f "$ZIVPN_SERVICE_FILE" ] && systemctl restart zivpn.service 2>/dev/null || true
+    [ -f "$UDP_CUSTOM_SERVICE_FILE" ] && systemctl restart udp-custom.service 2>/dev/null || true
 }
 
 ensure_firewall_boot_service() {
@@ -6628,7 +6633,7 @@ if [[ "$1" == "--exec" ]]; then
         install_slowudp|uninstall_slowudp|\
         install_slowdns|uninstall_slowdns|\
         torrent_block_enable|torrent_block_disable|\
-        update_haproxy_only|restore_firewall)
+        update_haproxy_only|restore_firewall|ensure_firewall_boot_service)
             "$action" </dev/null
             exit $?
             ;;

@@ -646,8 +646,8 @@ router.post('/access-codes', (req, res) => {
       resellerId: null, // Created by admin directly
       clientReference: clientReference || '',
       maxDataGb: parseFloat(maxDataGb) || 20,
-      expiryDays: parseInt(expiryDays, 10) || 30,
-      expiryDate: expiryDate ? expiryDate.trim() : null,
+      expiryDays: req.body.expiryDays ? parseInt(req.body.expiryDays, 10) : null,
+      expiryDate: req.body.expiryDate ? req.body.expiryDate.trim() : null,
       selectedTemplateIds: templatesList,
       templateMaxDataGbs,
       customUuids
@@ -672,9 +672,9 @@ router.post('/access-codes/:id/edit', (req, res) => {
     const codeRow = db.prepare('SELECT * FROM access_codes WHERE id = ?').get(codeId);
     if (!codeRow) throw new Error("Code d'accès introuvable.");
 
-    let expiryDateStr = expiryDate ? expiryDate.trim() : codeRow.expiry_date;
+    let expiryDateStr = (expiryDate && expiryDate.trim().length > 0) ? expiryDate.trim() : null;
     const validDays = parseInt(expiryDays, 10);
-    if (!expiryDate && !isNaN(validDays) && validDays > 0) {
+    if (!expiryDateStr && !isNaN(validDays) && validDays > 0) {
       const d = new Date();
       d.setDate(d.getDate() + validDays);
       expiryDateStr = d.toISOString().split('T')[0];

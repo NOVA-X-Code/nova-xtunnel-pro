@@ -25,6 +25,7 @@ if command -v haproxy &>/dev/null && systemctl is-active --quiet haproxy 2>/dev/
 fi
 
 # Ensure Firewall & IPTables boot restorer is active for SlowDNS/UDP/ZiVPN across reboots
+/usr/local/bin/menu --exec ensure_firewall_boot_service || true
 /usr/local/bin/menu --exec restore_firewall || true
 
 # Falcon Proxy has been removed from the panel entirely - clean up any leftover files from
